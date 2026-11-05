@@ -22,13 +22,6 @@ const ICON = {
   back: '<path d="M10 3L5 8l5 5"/>', chevron: '<path d="M4 6l4 4 4-4"/>', brain: '<path d="M6 3.5a2 2 0 0 0-3 1.7 2 2 0 0 0 0 3.6A2 2 0 0 0 6 12.5V3.5zM10 3.5a2 2 0 0 1 3 1.7 2 2 0 0 1 0 3.6 2 2 0 0 1-3 3.7V3.5z"/>',
   image: '<rect x="2" y="3" width="12" height="10" rx="1.5"/><circle cx="6" cy="6.5" r="1"/><path d="M14 11l-3.5-3.5L4 13"/>',
 }
-
-const S = {
-  view: 'chat', busy: false, items: [], models: [], model: undefined, thinking: undefined, thinkingLevels: [], mode: undefined, modes: [],
-  commands: [], usage: {}, sessions: [], sessionId: undefined, settings: { status: 'idle', settings: [], models: [], failed: {} },
-  query: '', group: 'model', open: new Set(), images: [], menu: null, sessionQuery: '',
-}
-
 // ───────────── markdown ─────────────
 const esc = s => s.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]))
 const inline = s => esc(s)
@@ -93,15 +86,26 @@ function toolEl(c, key) {
   if (!open) return line
   return h('div', {}, line, h('div', { class: 'tool-detail' },
     c.title && c.title !== t.text ? h('div', { class: 'muted' }, c.title) : null,
-    c.diff ? [diffEl(c.diff), h('div', { class: 'tool-actions' }, h('a', { onclick: () => send({ type: 'openDiff', toolId: c.id }) }, 'Open diff'), h('a', { onclick: () => send({ type: 'openFile', path: c.diff.path }) }, 'Open file'))] : null,
+    c.diff ? [diffEl(c.diff), h('div', { class: 'tool-actions' }, h('a', { onclick: () => send({ type: 'openDiff', tab: S.active, toolId: c.id }) }, 'Open diff'), h('a', { onclick: () => send({ type: 'openFile', path: c.diff.path }) }, 'Open file'))] : null,
     !c.diff && c.output ? h('pre', {}, c.output.length > 4000 ? c.output.slice(0, 4000) + '\n…' : c.output) : null,
     !c.diff && !c.output && c.input ? h('pre', { class: 'muted' }, c.input) : null))
 }
 
+
+// ───────────── state ─────────────
+const S = {
+  view: 'chat', tabs: [], active: undefined, models: [], cwd: '', transcripts: {},
+  sessions: [], settings: { status: 'idle', settings: [], models: [], failed: {} },
+  query: '', group: 'model', open: new Set(), images: [], menu: null, sessionQuery: '', modelQuery: '',
+  files: [], fileQuery: null, menuIndex: 0, drafts: {},
+}
+const tab = () => S.tabs.find(t => t.id === S.active) ?? { busy: false, queued: 0, thinkingLevels: [], modes: [], commands: [], usage: {} }
+const items = () => S.transcripts[S.active] ?? []
+
 // ───────────── chat items (incremental) ─────────────
 let transcriptEl = null
 const nodes = new Map()
-function toggle(key) { S.open.has(key) ? S.open.delete(key) : S.open.add(key); const it = S.items.find(x => x.id === key); if (it) upsertNode(it) }
+function toggle(key) { S.open.has(key) ? S.open.delete(key) : S.open.add(key); const it = items().find(x => x.id === key); if (it) upsertNode(it) }
 function itemNode(it) {
   switch (it.type) {
     case 'user': return h('div', { class: 'msg user', html: md(it.text) })
@@ -117,6 +121,7 @@ function itemNode(it) {
 }
 function upsertNode(it) {
   if (!transcriptEl) return
+  transcriptEl.querySelector('.empty')?.remove()
   const fresh = itemNode(it)
   const old = nodes.get(it.id)
   if (old) old.replaceWith(fresh); else transcriptEl.insertBefore(fresh, transcriptEl.querySelector('.working'))
@@ -129,58 +134,66 @@ function stickBottom(fn) {
 function renderWorking() {
   if (!transcriptEl) return
   transcriptEl.querySelector('.working')?.remove()
-  if (S.busy) transcriptEl.append(h('div', { class: 'working' }, h('span', { class: 'spinner' }), 'Working…'))
+  const t = tab()
+  if (t.busy) transcriptEl.append(h('div', { class: 'working' }, h('span', { class: 'spinner' }), 'Working…', t.queued ? h('span', { class: 'muted' }, ` · ${t.queued} queued`) : null))
 }
 
 // ───────────── views ─────────────
 const app = document.getElementById('app')
-function topbar(title, back) {
-  return h('div', { class: 'topbar' },
-    back ? h('button', { class: 'back', onclick: () => go('chat') }, svg(ICON.back), 'Back') : null,
-    h('div', { class: 'title' }, back ? title : (title || '')),
-    h('button', { class: 'icon-btn', title: 'New session', onclick: () => send({ type: 'newSession' }) }, svg(ICON.plus)),
+const folderName = p => p.replace(/\\/g, '/').split('/').filter(Boolean).pop() ?? p
+function tabbar() {
+  const bar = h('div', { class: 'tabbar' },
+    S.tabs.map((t, i) => h('div', { class: `tabchip${t.id === S.active ? ' on' : ''}${t.unread ? ' unread' : ''}`, title: t.title ?? 'New chat', onclick: () => activate(t.id), onauxclick: e => { if (e.button === 1) send({ type: 'closeTab', tab: t.id }) } },
+      t.busy ? h('span', { class: 'spinner sm' }) : h('span', { class: `dot-state${t.unread ? ' unread' : ''}` }),
+      h('span', { class: 'tab-label' }, t.title || `Chat ${i + 1}`),
+      h('button', { class: 'tab-x', title: 'Close tab', onclick: e => { e.stopPropagation(); send({ type: 'closeTab', tab: t.id }) } }, '×'))),
+    h('button', { class: 'icon-btn', title: 'New tab (runs in parallel)', onclick: () => send({ type: 'newTab' }) }, svg(ICON.plus)))
+  return h('div', { class: 'topbar' }, bar,
     h('button', { class: 'icon-btn', title: 'History', onclick: () => go('history') }, svg(ICON.history)),
     h('button', { class: 'icon-btn', title: 'Settings', onclick: () => go('settings') }, svg(ICON.gear)))
 }
+function backbar(title) {
+  return h('div', { class: 'topbar' }, h('button', { class: 'back', onclick: () => go('chat') }, svg(ICON.back), 'Back'), h('div', { class: 'title' }, title))
+}
+function activate(id) { if (id === S.active) return; saveDraft(); S.active = id; S.menu = null; send({ type: 'activate', tab: id }); render() }
 function go(view) {
   S.view = view; S.menu = null
   if (view === 'history') send({ type: 'listSessions' })
   if (view === 'settings' && !S.settings.settings.length) send({ type: 'loadSettings' })
   render()
 }
-function sessionTitle() {
-  const first = S.items.find(i => i.type === 'user')
-  return first ? first.text.split('\n')[0].slice(0, 60) : ''
-}
+function saveDraft() { const ta = document.getElementById('input'); if (ta && S.active) S.drafts[S.active] = ta.value }
 
 function chatView() {
   transcriptEl = h('div', { class: 'transcript' })
   nodes.clear()
-  if (!S.items.length) {
+  const list = items()
+  if (!list.length) {
     transcriptEl.append(h('div', { class: 'empty' }, h('div', { class: 'logo' }, 'π'), h('h2', {}, 'Oh My Pi'),
-      h('div', { class: 'muted' }, 'omp runs here with your ~/.omp setup.'),
+      h('div', { class: 'muted' }, S.cwd ? `omp in ${folderName(S.cwd)} · each tab runs on its own` : 'omp runs here with your ~/.omp setup.'),
       h('div', { class: 'suggest' }, ['Explain this project structure', 'Find and fix a bug in the current file', 'Write tests for the selected code']
         .map(t => h('button', { onclick: () => { const ta = document.getElementById('input'); ta.value = t; ta.focus() } }, t)))))
   } else {
-    for (const it of S.items) { const n = itemNode(it); nodes.set(it.id, n); transcriptEl.append(n) }
+    for (const it of list) { const n = itemNode(it); nodes.set(it.id, n); transcriptEl.append(n) }
   }
   renderWorking()
   const wrap = h('div', { class: 'composer-wrap' }, composer())
   queueMicrotask(() => { transcriptEl.scrollTop = transcriptEl.scrollHeight })
-  return [topbar(sessionTitle()), transcriptEl, wrap]
+  return [tabbar(), transcriptEl, wrap]
 }
 
 function modelName(sel) { return S.models.find(m => m.selector === sel)?.name ?? (sel ? sel.split('/').pop() : 'Model') }
 
 function composer() {
+  const t = tab()
   const ta = h('textarea', {
-    id: 'input', rows: 1, placeholder: S.busy ? 'Queue a message, or Esc to stop' : 'Ask omp anything, / for commands',
+    id: 'input', rows: 1, placeholder: t.busy ? 'Message will be queued · Esc to stop' : 'Ask omp anything · @ to add files · / for commands',
     onkeydown: e => {
-      if (S.menu === 'slash' && ['ArrowDown', 'ArrowUp', 'Enter', 'Tab'].includes(e.key)) return slashKey(e)
+      if ((S.menu === 'slash' || S.menu === 'files') && ['ArrowDown', 'ArrowUp', 'Enter', 'Tab'].includes(e.key)) return menuKey(e)
       if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); submit() }
-      if (e.key === 'Escape') { if (S.menu) closeMenu(); else if (S.busy) send({ type: 'cancel' }) }
+      if (e.key === 'Escape') { if (S.menu) closeMenu(); else if (t.busy) send({ type: 'cancel', tab: S.active }) }
     },
-    oninput: () => { autosize(ta); updateSlash(ta) },
+    oninput: () => { autosize(ta); updateInlineMenus(ta) },
     onpaste: e => {
       for (const f of e.clipboardData?.files ?? []) if (f.type.startsWith('image/')) {
         e.preventDefault()
@@ -188,20 +201,20 @@ function composer() {
       }
     },
   })
-  const plan = S.mode === 'plan'
-  const pct = S.usage.size ? Math.round((S.usage.used ?? 0) / S.usage.size * 100) : null
+  const plan = t.mode === 'plan'
+  const pct = t.usage?.size ? Math.round((t.usage.used ?? 0) / t.usage.size * 100) : null
   const box = h('div', { class: 'composer', id: 'composer' },
     S.images.length ? h('div', { class: 'attachments' }, S.images.map((img, i) => h('span', { class: 'attach' }, h('img', { src: img.url }), h('button', { onclick: () => { S.images.splice(i, 1); refreshComposer() } }, '×')))) : null,
     ta,
     h('div', { class: 'composer-bar' },
-      S.modes.length > 1 ? h('button', { class: `chip-btn${plan ? ' plan' : ''}`, title: 'Plan mode (read-only planning)', onclick: () => send({ type: 'setMode', value: plan ? 'default' : 'plan' }) }, plan ? '⏸ Plan mode' : 'Plan') : null,
-      h('button', { class: `chip-btn${S.menu === 'model' ? ' open' : ''}`, onclick: () => openMenu('model') }, h('span', { class: 'label' }, modelName(S.model)), svg(ICON.chevron)),
-      S.thinkingLevels.length ? h('button', { class: `chip-btn${S.menu === 'thinking' ? ' open' : ''}`, onclick: () => openMenu('thinking') }, svg(ICON.brain), h('span', { class: 'label' }, S.thinking ?? 'auto')) : null,
+      t.modes.length > 1 ? h('button', { class: `chip-btn${plan ? ' plan' : ''}`, title: 'Plan mode (read-only planning)', onclick: () => send({ type: 'setMode', tab: S.active, value: plan ? 'default' : 'plan' }) }, plan ? '⏸ Plan mode' : 'Plan') : null,
+      h('button', { class: `chip-btn${S.menu === 'model' ? ' open' : ''}`, onclick: () => openMenu('model') }, h('span', { class: 'label' }, modelName(t.model)), svg(ICON.chevron)),
+      t.thinkingLevels.length ? h('button', { class: `chip-btn${S.menu === 'thinking' ? ' open' : ''}`, onclick: () => openMenu('thinking') }, svg(ICON.brain), h('span', { class: 'label' }, t.thinking ?? 'auto')) : null,
+      h('button', { class: 'chip-btn', title: 'Add file (@)', onclick: () => { const x = document.getElementById('input'); x.value += (x.value && !/\s$/.test(x.value) ? ' ' : '') + '@'; x.focus(); updateInlineMenus(x) } }, '@'),
       h('span', { class: 'grow' }),
-      pct !== null ? h('span', { class: 'ctx', title: `${S.usage.used} / ${S.usage.size} tokens${S.usage.cost ? ` · $${S.usage.cost.toFixed(4)}` : ''}` }, `${pct}%`) : null,
-      S.busy
-        ? h('button', { class: 'send stop', title: 'Stop (Esc)', onclick: () => send({ type: 'cancel' }) }, svg(ICON.stop))
-        : h('button', { class: 'send', title: 'Send (Enter)', onclick: submit }, svg(ICON.up))),
+      pct !== null ? h('span', { class: 'ctx', title: `${t.usage.used} / ${t.usage.size} tokens${t.usage.cost ? ` · $${t.usage.cost.toFixed(4)}` : ''}` }, `${pct}%`) : null,
+      t.busy ? h('button', { class: 'send stop', title: 'Stop (Esc)', onclick: () => send({ type: 'cancel', tab: S.active }) }, svg(ICON.stop)) : null,
+      h('button', { class: 'send', title: t.busy ? 'Queue message (Enter)' : 'Send (Enter)', onclick: submit }, svg(ICON.up))),
     menuEl())
   queueMicrotask(() => autosize(ta))
   return box
@@ -215,68 +228,97 @@ function refreshComposer() {
   if (focused) { nt.focus(); nt.setSelectionRange(pos, pos) }
 }
 
-// menus
-let slashIndex = 0
+// menus: model, thinking, /commands, @files
 function openMenu(kind) { S.menu = S.menu === kind ? null : kind; refreshComposer(); if (S.menu === 'model') setTimeout(() => document.getElementById('model-filter')?.focus(), 0) }
-function closeMenu() { S.menu = null; refreshComposer() }
+function closeMenu() { S.menu = null; S.fileQuery = null; refreshComposer() }
 function menuEl() {
+  const t = tab()
   if (S.menu === 'model') {
-    const q = (S.modelQuery ?? '').toLowerCase()
+    const q = S.modelQuery.toLowerCase()
     const by = {}
     for (const m of S.models) if (!q || m.name.toLowerCase().includes(q) || m.selector.toLowerCase().includes(q)) (by[m.provider] ??= []).push(m)
-    const filter = h('input', { type: 'text', id: 'model-filter', placeholder: 'Filter models…', value: S.modelQuery ?? '', oninput: e => { S.modelQuery = e.target.value; const pos = e.target.selectionStart; refreshComposer(); const f = document.getElementById('model-filter'); f.focus(); f.setSelectionRange(pos, pos) }, onkeydown: e => { if (e.key === 'Escape') closeMenu() } })
+    const filter = h('input', { type: 'text', id: 'model-filter', placeholder: 'Filter models…', value: S.modelQuery, oninput: e => { S.modelQuery = e.target.value; const pos = e.target.selectionStart; refreshComposer(); const f = document.getElementById('model-filter'); f.focus(); f.setSelectionRange(pos, pos) }, onkeydown: e => { if (e.key === 'Escape') closeMenu() } })
     return h('div', { class: 'menu', style: 'left:6px' }, filter,
       !S.models.length ? h('div', { class: 'menu-group' }, 'Loading models…') : null,
-      Object.entries(by).map(([p, list]) => [h('div', { class: 'menu-group' }, p), list.slice(0, 60).map(m => h('button', { class: `menu-item${m.selector === S.model ? ' active' : ''}`, onclick: () => { send({ type: 'setModel', value: m.selector }); S.model = m.selector; S.modelQuery = ''; closeMenu() } }, h('span', { class: 'check' }, m.selector === S.model ? '✓' : ''), m.name))]))
+      Object.entries(by).map(([p, list]) => [h('div', { class: 'menu-group' }, p), list.slice(0, 60).map(m => h('button', { class: `menu-item${m.selector === t.model ? ' active' : ''}`, onclick: () => { send({ type: 'setModel', tab: S.active, value: m.selector }); t.model = m.selector; S.modelQuery = ''; closeMenu() } }, h('span', { class: 'check' }, m.selector === t.model ? '✓' : ''), m.name))]))
   }
   if (S.menu === 'thinking') {
     return h('div', { class: 'menu', style: 'left:60px;min-width:160px' }, h('div', { class: 'menu-group' }, 'Thinking'),
-      S.thinkingLevels.map(l => h('button', { class: `menu-item${l === S.thinking ? ' active' : ''}`, onclick: () => { send({ type: 'setThinking', value: l }); S.thinking = l; closeMenu() } }, h('span', { class: 'check' }, l === S.thinking ? '✓' : ''), l)))
+      t.thinkingLevels.map(l => h('button', { class: `menu-item${l === t.thinking ? ' active' : ''}`, onclick: () => { send({ type: 'setThinking', tab: S.active, value: l }); t.thinking = l; closeMenu() } }, h('span', { class: 'check' }, l === t.thinking ? '✓' : ''), l)))
   }
   if (S.menu === 'slash') {
     const hits = slashHits()
     if (!hits.length) return null
-    return h('div', { class: 'menu', style: 'left:0;right:0' }, hits.map((c, i) => h('button', { class: `menu-item${i === slashIndex ? ' active' : ''}`, onclick: () => pickSlash(c) }, h('strong', {}, '/' + c.name), h('span', { class: 'desc' }, c.description ?? ''))))
+    return h('div', { class: 'menu', style: 'left:0;right:0' }, hits.map((c, i) => h('button', { class: `menu-item${i === S.menuIndex ? ' active' : ''}`, onclick: () => pickSlash(c) }, h('strong', {}, '/' + c.name), h('span', { class: 'desc' }, c.description ?? ''))))
+  }
+  if (S.menu === 'files') {
+    return h('div', { class: 'menu', style: 'left:0;right:0' },
+      h('div', { class: 'menu-group' }, S.fileQuery ? `Files matching “${S.fileQuery}”` : 'Files'),
+      !S.files.length ? h('div', { class: 'menu-item muted' }, 'No matching files') : null,
+      S.files.map((f, i) => { const parts = f.split('/'); const name = parts.pop(); return h('button', { class: `menu-item${i === S.menuIndex ? ' active' : ''}`, onclick: () => pickFile(f) }, h('span', {}, name), h('span', { class: 'desc' }, parts.join('/'))) }))
   }
   return null
 }
-function slashHits() { const ta = document.getElementById('input'); const m = ta && /^\/(\S*)$/.exec(ta.value); return m ? S.commands.filter(c => c.name.startsWith(m[1])).slice(0, 10) : [] }
-function updateSlash(ta) {
-  const want = /^\/\S*$/.test(ta.value) && S.commands.length ? 'slash' : null
-  if (want !== S.menu && (want === 'slash' || S.menu === 'slash')) { S.menu = want; slashIndex = 0; refreshComposer() }
-  else if (want === 'slash') { slashIndex = 0; refreshComposer() }
+function slashHits() { const ta = document.getElementById('input'); const m = ta && /^\/(\S*)$/.exec(ta.value); return m ? tab().commands.filter(c => c.name.startsWith(m[1])).slice(0, 10) : [] }
+/** `@query` right before the caret, or null. */
+function mentionAt(ta) { const before = ta.value.slice(0, ta.selectionStart); const m = /(^|\s)@([^\s@]*)$/.exec(before); return m ? m[2] : null }
+let fileTimer = null
+function updateInlineMenus(ta) {
+  const mention = mentionAt(ta)
+  if (mention !== null) {
+    if (S.menu !== 'files') { S.menu = 'files'; S.files = []; S.menuIndex = 0 }
+    if (mention !== S.fileQuery) {
+      S.fileQuery = mention
+      clearTimeout(fileTimer); fileTimer = setTimeout(() => send({ type: 'findFiles', query: mention }), 120)
+    }
+    refreshComposer(); return
+  }
+  const wantSlash = /^\/\S*$/.test(ta.value) && tab().commands.length
+  if (wantSlash) { S.menu = 'slash'; S.menuIndex = 0; refreshComposer(); return }
+  if (S.menu === 'slash' || S.menu === 'files') { S.menu = null; S.fileQuery = null; refreshComposer() }
 }
-function slashKey(e) {
-  const hits = slashHits(); if (!hits.length) return
+function menuKey(e) {
+  const list = S.menu === 'slash' ? slashHits() : S.files
+  if (!list.length) return
   e.preventDefault()
-  if (e.key === 'ArrowDown') slashIndex = (slashIndex + 1) % hits.length
-  else if (e.key === 'ArrowUp') slashIndex = (slashIndex - 1 + hits.length) % hits.length
-  else return pickSlash(hits[slashIndex])
+  if (e.key === 'ArrowDown') S.menuIndex = (S.menuIndex + 1) % list.length
+  else if (e.key === 'ArrowUp') S.menuIndex = (S.menuIndex - 1 + list.length) % list.length
+  else return S.menu === 'slash' ? pickSlash(list[S.menuIndex]) : pickFile(list[S.menuIndex])
   refreshComposer()
 }
 function pickSlash(c) { const ta = document.getElementById('input'); ta.value = `/${c.name} `; S.menu = null; refreshComposer(); document.getElementById('input').focus() }
+function pickFile(path) {
+  const ta = document.getElementById('input')
+  const pos = ta.selectionStart
+  const before = ta.value.slice(0, pos).replace(/@([^\s@]*)$/, `@${path} `)
+  ta.value = before + ta.value.slice(pos)
+  S.menu = null; S.fileQuery = null
+  refreshComposer()
+  const nt = document.getElementById('input'); nt.focus(); nt.setSelectionRange(before.length, before.length)
+}
 
 function submit() {
   const ta = document.getElementById('input')
   const text = ta.value.trim()
-  if (!text && !S.images.length) return
-  send({ type: 'prompt', text, images: S.images.map(({ mimeType, data }) => ({ mimeType, data })) })
-  ta.value = ''; S.images = []; S.menu = null
+  if ((!text && !S.images.length) || !S.active) return
+  send({ type: 'prompt', tab: S.active, text, images: S.images.map(({ mimeType, data }) => ({ mimeType, data })) })
+  ta.value = ''; S.images = []; S.menu = null; S.drafts[S.active] = ''
   refreshComposer()
 }
 
 // history
 function historyView() {
   const q = S.sessionQuery.toLowerCase()
+  const open = new Set(S.tabs.map(t => t.id))
   const rows = S.sessions.filter(s => !q || (s.title ?? '').toLowerCase().includes(q))
   const groups = {}
   for (const s of rows) { const d = s.updatedAt ? new Date(s.updatedAt) : null; const key = d ? relDay(d) : 'Older'; (groups[key] ??= []).push(s) }
   const search = h('input', { type: 'search', class: 'search', placeholder: 'Search sessions…', value: S.sessionQuery, oninput: e => { S.sessionQuery = e.target.value; const p = e.target.selectionStart; render(); const f = document.querySelector('.search'); f.focus(); f.setSelectionRange(p, p) } })
-  return [topbar('History', true), h('div', { class: 'page' }, search,
-    !S.sessions.length ? h('div', { class: 'muted', style: 'padding:10px' }, 'No omp sessions in this folder yet.') : null,
-    Object.entries(groups).map(([day, list]) => [h('div', { class: 'day' }, day), list.map(s => h('button', { class: `session${s.sessionId === S.sessionId ? ' current' : ''}`, onclick: () => send({ type: 'loadSession', sessionId: s.sessionId }) },
+  return [backbar('History'), h('div', { class: 'page' }, search,
+    !S.sessions.length ? h('div', { class: 'muted', style: 'padding:10px' }, `No omp sessions in ${folderName(S.cwd)} yet.`) : null,
+    Object.entries(groups).map(([day, list]) => [h('div', { class: 'day' }, day), list.map(s => h('button', { class: `session${open.has(s.sessionId) ? ' current' : ''}`, onclick: () => send({ type: 'loadSession', sessionId: s.sessionId }) },
       h('div', { class: 'session-title' }, (s.title || 'Untitled session').replace(/^\S*\s*ESC:\s*/, '')),
-      h('div', { class: 'session-meta' }, s.updatedAt ? new Date(s.updatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '')))]))]
+      h('div', { class: 'session-meta' }, [s.updatedAt ? new Date(s.updatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '', open.has(s.sessionId) ? 'open in a tab' : ''].filter(Boolean).join(' · '))))]))]
 }
 function relDay(d) {
   const day = 864e5, now = new Date(); const t0 = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime()
@@ -377,7 +419,7 @@ function settingsView() {
   const body = h('div', { class: 'page' })
   if (st.status !== 'ready' && !st.settings.length) {
     body.append(st.status === 'error' ? h('div', {}, h('div', { class: 'error' }, st.error), h('button', { class: 'add-btn', onclick: () => send({ type: 'loadSettings' }) }, 'Retry')) : h('div', { class: 'working', style: 'padding:12px' }, h('span', { class: 'spinner' }), 'Loading omp settings…'))
-    return [topbar('Settings', true), body]
+    return [backbar('Settings'), body]
   }
   const groups = GROUPS.filter(([g]) => st.settings.some(s => s.group === g))
   const search = h('input', { type: 'search', class: 'search', placeholder: `Search ${st.settings.length} omp settings…`, value: S.query, oninput: e => { S.query = e.target.value; settingsPage = 1; cats.style.display = S.query ? 'none' : ''; renderSettingsList() } })
@@ -385,45 +427,57 @@ function settingsView() {
   settingsList = h('div', { class: 'settings-layout' })
   body.append(h('div', { class: 'muted', style: 'font-size:.86em' }, 'Saved to ~/.omp/agent/config.yml — the same file the omp TUI uses.'), search, cats, settingsList)
   renderSettingsList()
-  return [topbar('Settings', true), body]
+  return [backbar('Settings'), body]
 }
 
 // ───────────── render / wiring ─────────────
 function render() {
-  const draft = document.getElementById('input')?.value
+  saveDraft()
   app.innerHTML = ''
   transcriptEl = null; settingsList = null
   const parts = S.view === 'chat' ? chatView() : S.view === 'history' ? historyView() : settingsView()
   app.append(...[parts].flat())
-  if (draft !== undefined && document.getElementById('input')) { const ta = document.getElementById('input'); ta.value = draft; autosize(ta) }
+  const ta = document.getElementById('input')
+  if (ta && S.active) { ta.value = S.drafts[S.active] ?? ''; autosize(ta) }
 }
 
 document.addEventListener('click', (e) => {
   const a = e.target.closest?.('a.file')
   if (a) { e.preventDefault(); send({ type: 'openFile', path: a.dataset.path, ...a.dataset.line ? { line: Number(a.dataset.line) } : {} }); return }
-  if (S.menu && S.menu !== 'slash' && !e.target.closest('.menu') && !e.target.closest('.chip-btn')) closeMenu()
+  if (S.menu && !e.target.closest('.menu') && !e.target.closest('.chip-btn') && !e.target.closest('#input')) closeMenu()
 })
 
 window.addEventListener('message', ({ data: m }) => {
   switch (m.type) {
-    case 'state': {
-      const was = S.busy
-      Object.assign(S, { busy: m.busy, models: m.models, model: m.model, thinking: m.thinking, thinkingLevels: m.thinkingLevels, mode: m.mode, modes: m.modes, commands: m.commands, sessionId: m.sessionId })
-      if (S.view === 'chat') { refreshComposer(); if (was !== S.busy) stickBottom(renderWorking) }
+    case 'tabs': {
+      const changedActive = m.active !== S.active
+      const structure = S.tabs.map(t => t.id).join() !== m.tabs.map(t => t.id).join()
+      S.tabs = m.tabs; S.models = m.models; S.cwd = m.cwd
+      if (changedActive) { saveDraft(); S.active = m.active }
+      if (S.view === 'chat') { if (changedActive || structure) render(); else refreshComposer() }
       return
     }
-    case 'reset': S.items = m.items; S.usage = {}; S.open.clear(); if (S.view === 'chat') render(); return
-    case 'upsert': {
-      const i = S.items.findIndex(x => x.id === m.item.id)
-      const first = !S.items.length
-      if (i >= 0) S.items[i] = m.item; else S.items.push(m.item)
+    case 'tab': {
+      const i = S.tabs.findIndex(t => t.id === m.tab.id)
+      if (i < 0) return
+      const was = S.tabs[i]
+      S.tabs[i] = m.tab
       if (S.view !== 'chat') return
-      if (first) { render(); return }
-      stickBottom(() => upsertNode(m.item))
-      if (m.item.type === 'user') document.querySelector('.topbar .title').textContent = sessionTitle()
+      // Tab strip (spinner / unread / title) always; composer and spinner only for the active tab.
+      const strip = document.querySelector('.tabbar')
+      if (strip) strip.replaceWith(tabbar().querySelector('.tabbar'))
+      if (m.tab.id === S.active) { refreshComposer(); if (was.busy !== m.tab.busy || was.queued !== m.tab.queued) stickBottom(renderWorking) }
       return
     }
-    case 'usage': S.usage = m; if (S.view === 'chat') refreshComposer(); return
+    case 'reset': S.transcripts[m.tab] = m.items; if (m.tab === S.active && S.view === 'chat') { S.open.clear(); render() } return
+    case 'upsert': {
+      const list = (S.transcripts[m.tab] ??= [])
+      const i = list.findIndex(x => x.id === m.item.id)
+      if (i >= 0) list[i] = m.item; else list.push(m.item)
+      if (m.tab === S.active && S.view === 'chat') stickBottom(() => upsertNode(m.item))
+      return
+    }
+    case 'files': if (S.menu === 'files' && m.query === S.fileQuery) { S.files = m.files; S.menuIndex = 0; refreshComposer() } return
     case 'sessions': S.sessions = m.rows; if (S.view === 'history') render(); return
     case 'settings': {
       const firstLoad = !S.settings.settings.length

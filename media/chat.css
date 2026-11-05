@@ -193,3 +193,20 @@ select { color: var(--vscode-dropdown-foreground); background: var(--vscode-drop
 .kv { grid-template-columns: minmax(60px, auto) 1fr; }
 .kv > .add-btn, .kv > span:empty { grid-column: 2; justify-self: start; }
 .kv .pair { flex-direction: row; }
+
+/* ── tabs (one per omp session, all run in parallel) ── */
+.topbar { gap: 4px; padding: 6px 8px 4px; }
+.tabbar { flex: 1; min-width: 0; display: flex; align-items: center; gap: 2px; overflow-x: auto; scrollbar-width: none; }
+.tabbar::-webkit-scrollbar { display: none; }
+.tabchip { display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 4px 0 9px; border-radius: 13px; cursor: pointer; color: var(--muted); flex: 0 1 auto; min-width: 0; max-width: 170px; user-select: none; }
+.tabchip:hover { background: var(--soft); color: var(--vscode-foreground); }
+.tabchip.on { background: var(--soft); color: var(--vscode-foreground); box-shadow: inset 0 0 0 1px var(--line); }
+.tab-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.9em; }
+.tab-x { width: 16px; height: 16px; border-radius: 50%; display: inline-grid; place-items: center; color: var(--muted); font-size: 13px; line-height: 1; visibility: hidden; flex: none; }
+.tabchip:hover .tab-x, .tabchip.on .tab-x { visibility: visible; }
+.tab-x:hover { background: var(--line); color: var(--vscode-foreground); }
+.dot-state { width: 6px; height: 6px; border-radius: 50%; background: var(--line); flex: none; }
+.dot-state.unread { background: var(--accent); }
+.tabchip.unread .tab-label { color: var(--vscode-foreground); font-weight: 600; }
+.spinner.sm { width: 10px; height: 10px; border-width: 1.5px; flex: none; }
+.menu-item .desc { max-width: 60%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

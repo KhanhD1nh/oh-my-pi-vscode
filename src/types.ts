@@ -47,31 +47,51 @@ export type ChatItem =
 /** Session row in history. */
 export interface SessionRow { sessionId: string; title?: string; cwd: string; updatedAt?: string }
 
-/** Host → webview messages. */
+/** One open tab (omp session) as the webview shows it. */
+export interface TabState {
+  id: string
+  title?: string
+  busy: boolean
+  queued: number
+  model?: string
+  thinking?: string
+  thinkingLevels: string[]
+  mode?: string
+  modes: { id: string; name: string }[]
+  commands: { name: string; description?: string }[]
+  usage: { used?: number; size?: number; cost?: number }
+  /** Unseen activity since the tab was last active. */
+  unread?: boolean
+}
+
+/** Host → webview messages. Tab-scoped messages carry the session id. */
 export type HostMessage =
-  | { type: 'state'; busy: boolean; sessionId?: string; models: AgentModelChoice[]; model?: string; thinking?: string; thinkingLevels: string[]; mode?: string; modes: { id: string; name: string }[]; commands: { name: string; description?: string }[] }
-  | { type: 'reset'; items: ChatItem[] }
-  | { type: 'upsert'; item: ChatItem }
-  | { type: 'usage'; used?: number; size?: number; cost?: number }
+  | { type: 'tabs'; tabs: TabState[]; active?: string; models: AgentModelChoice[]; cwd: string }
+  | { type: 'tab'; tab: TabState }
+  | { type: 'reset'; tab: string; items: ChatItem[] }
+  | { type: 'upsert'; tab: string; item: ChatItem }
   | { type: 'sessions'; rows: SessionRow[] }
   | { type: 'settings'; status: 'loading' | 'ready' | 'error'; error?: string; settings: AgentSetting[]; models: AgentModelChoice[]; saving?: string; failed?: Record<string, string> }
   | { type: 'view'; view: 'chat' | 'history' | 'settings' }
   | { type: 'insert'; text: string }
+  | { type: 'files'; query: string; files: string[] }
 
 /** Webview → host messages. */
 export type WebviewMessage =
   | { type: 'ready' }
-  | { type: 'prompt'; text: string; images?: { mimeType: string; data: string }[] }
-  | { type: 'cancel' }
-  | { type: 'newSession' }
-  | { type: 'setModel'; value: string }
-  | { type: 'setThinking'; value: string }
-  | { type: 'setMode'; value: string }
+  | { type: 'prompt'; tab: string; text: string; images?: { mimeType: string; data: string }[] }
+  | { type: 'cancel'; tab: string }
+  | { type: 'newTab' }
+  | { type: 'closeTab'; tab: string }
+  | { type: 'activate'; tab: string }
+  | { type: 'setModel'; tab: string; value: string }
+  | { type: 'setThinking'; tab: string; value: string }
+  | { type: 'setMode'; tab: string; value: string }
   | { type: 'openFile'; path: string; line?: number }
-  | { type: 'openDiff'; toolId: string }
+  | { type: 'openDiff'; tab: string; toolId: string }
   | { type: 'listSessions' }
   | { type: 'loadSession'; sessionId: string }
   | { type: 'loadSettings' }
   | { type: 'setSetting'; key: string; value: AgentSettingValue }
   | { type: 'resetSetting'; key: string }
-  | { type: 'view'; view: 'chat' | 'history' | 'settings' }
+  | { type: 'findFiles'; query: string }

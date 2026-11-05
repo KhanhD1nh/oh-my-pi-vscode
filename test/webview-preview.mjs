@@ -38,13 +38,26 @@ await page.evaluate(() => { window.__sent = []; window.acquireVsCodeApi = () => 
 await page.addScriptTag({ content: js })
 const post = m => page.evaluate(msg => window.dispatchEvent(new MessageEvent('message', { data: msg })), m)
 await page.screenshot({ path: `${out}/vsc-empty.png` })
-await post({ type: 'state', busy: true, models, model: '9router/cx/gpt-6.1-terra', thinking: 'medium', thinkingLevels: ['off', 'low', 'medium', 'high'], mode: 'default', modes: [{ id: 'default', name: 'Default' }, { id: 'plan', name: 'Plan' }], commands: [{ name: 'plan', description: 'Enter plan mode' }, { name: 'model', description: 'Show current model' }] })
-await post({ type: 'reset', items })
-await post({ type: 'usage', used: 41000, size: 272000, cost: 0.0213 })
+const base = { thinkingLevels: ['off', 'low', 'medium', 'high'], modes: [{ id: 'default', name: 'Default' }, { id: 'plan', name: 'Plan' }], commands: [{ name: 'plan', description: 'Enter plan mode' }, { name: 'model', description: 'Show current model' }], queued: 0 }
+const tabs = [
+  { ...base, id: 'A', title: 'Fix date parsing', busy: true, queued: 1, model: '9router/cx/gpt-6.1-terra', thinking: 'medium', mode: 'default', usage: { used: 41000, size: 272000, cost: 0.0213 } },
+  { ...base, id: 'B', title: 'Refactor auth middleware', busy: true, model: '9router/cc/claude-sonnet-5-5', thinking: 'high', usage: {} },
+  { ...base, id: 'C', title: 'Write release notes', busy: false, unread: true, model: 'openai/gpt-6', usage: {} },
+]
+await post({ type: 'tabs', tabs, active: 'A', models, cwd: 'D:/WorkSpace/XE-VN' })
+await post({ type: 'reset', tab: 'A', items })
 await page.click('.tool-line >> nth=1')
 await page.waitForTimeout(200)
 await page.screenshot({ path: `${out}/vsc-chat.png` })
-await page.click('.chip-btn >> nth=1')
+await page.fill('#input', 'look at @dat')
+ await page.focus('#input'); await page.evaluate(() => { const t = document.getElementById('input'); t.setSelectionRange(t.value.length, t.value.length); t.dispatchEvent(new Event('input')) })
+ await post({ type: 'files', query: 'dat', files: ['src/lib/date.ts', 'src/lib/date.test.ts', 'src/features/reports/lib/date-range.ts'] })
+ await page.waitForTimeout(200)
+ await page.screenshot({ path: `${out}/vsc-files.png` })
+ await page.keyboard.press('Enter')
+ await page.waitForTimeout(100)
+ console.log('after pick:', await page.inputValue('#input'))
+ await page.click('.chip-btn >> nth=1')
 await page.waitForTimeout(200)
 await page.screenshot({ path: `${out}/vsc-model.png` })
 await post({ type: 'view', view: 'settings' })
