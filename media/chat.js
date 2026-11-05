@@ -144,11 +144,11 @@ const folderName = p => p.replace(/\\/g, '/').split('/').filter(Boolean).pop() ?
 function tabbar() {
   const bar = h('div', { class: 'tabbar' },
     S.tabs.map((t, i) => h('div', { class: `tabchip${t.id === S.active ? ' on' : ''}${t.unread ? ' unread' : ''}`, title: t.title ?? 'New chat', onclick: () => activate(t.id), onauxclick: e => { if (e.button === 1) send({ type: 'closeTab', tab: t.id }) } },
-      t.busy ? h('span', { class: 'tab-ico busy', title: 'Running' }, '✻') : h('span', { class: `tab-ico${t.unread ? ' unread' : ''}`, title: t.unread ? 'Finished — not viewed yet' : '' }, 'π'),
+      piIcon(t),
       h('span', { class: 'tab-label' }, t.title || `Chat ${i + 1}`),
       h('button', { class: 'tab-x', title: 'Close tab', onclick: e => { e.stopPropagation(); send({ type: 'closeTab', tab: t.id }) } }, '×'))),
-    h('button', { class: 'icon-btn', title: 'New tab (runs in parallel)', onclick: () => send({ type: 'newTab' }) }, svg(ICON.plus)))
-  return h('div', { class: 'topbar' }, bar,
+    )
+  return h('div', { class: 'topbar' }, bar, h('button', { class: 'icon-btn', title: 'New tab (runs in parallel)', onclick: () => send({ type: 'newTab' }) }, svg(ICON.plus)),
     h('button', { class: 'icon-btn', title: 'History', onclick: () => go('history') }, svg(ICON.history)),
     h('button', { class: 'icon-btn', title: 'Settings', onclick: () => go('settings') }, svg(ICON.gear)))
 }
@@ -497,3 +497,10 @@ window.addEventListener('message', ({ data: m }) => {
 
 render()
 send({ type: 'ready' })
+
+/** Tab icon: π in a square; while running, dots chase around the square's edge. */
+function piIcon(t) {
+  const s = svg(`${t.busy ? '<rect class="orbit" x="1" y="1" width="14" height="14" rx="3"/>' : ''}<path d="M4.6 5.6H11.4M6.6 5.6V11M9.4 5.6V10.2Q9.4 11 10.3 11" stroke-width="1.6"/>`)
+  s.setAttribute('class', `tab-ico${t.busy ? ' busy' : ''}${t.unread ? ' unread' : ''}`)
+  return s
+}

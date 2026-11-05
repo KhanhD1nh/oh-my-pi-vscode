@@ -31,7 +31,7 @@ const settings = {
   ],
 }
 const browser = await chromium.launch({ executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe', headless: true })
-const page = await browser.newPage({ viewport: { width: 440, height: 860 } })
+const page = await browser.newPage({ viewport: { width: 440, height: 860 }, deviceScaleFactor: 2 })
 page.on('pageerror', e => console.log('PAGEERROR', String(e)))
 await page.setContent(`<html><head><style>${vars}${css}</style></head><body><div id="app"></div></body></html>`)
 await page.evaluate(() => { window.__sent = []; window.acquireVsCodeApi = () => ({ postMessage: m => window.__sent.push(m) }) })
@@ -48,7 +48,7 @@ await post({ type: 'tabs', tabs, active: 'A', models, cwd: 'D:/WorkSpace/XE-VN' 
 await post({ type: 'reset', tab: 'A', items })
 await page.click('.tool-line >> nth=1')
 await page.waitForTimeout(200)
-await page.screenshot({ path: `${out}/vsc-chat.png` })
+await page.screenshot({ path: `${out}/vsc-chat.png` }); await page.screenshot({ path: `${out}/vsc-tabs.png`, clip: { x: 0, y: 0, width: 440, height: 40 } })
 await page.fill('#input', 'look at @dat')
  await page.focus('#input'); await page.evaluate(() => { const t = document.getElementById('input'); t.setSelectionRange(t.value.length, t.value.length); t.dispatchEvent(new Event('input')) })
  await post({ type: 'files', query: 'dat', files: ['src/lib/date.ts', 'src/lib/date.test.ts', 'src/features/reports/lib/date-range.ts'] })

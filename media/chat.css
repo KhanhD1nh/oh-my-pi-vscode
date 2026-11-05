@@ -221,3 +221,10 @@ select { color: var(--vscode-dropdown-foreground); background: var(--vscode-drop
 .tab-x { border-radius: 4px; }
 .tabchip > .icon-btn { border-radius: 4px; }
 .tabchip { min-width: 110px; flex-shrink: 0; }
+
+/* π tab icon; dots run around the square while busy */
+svg.tab-ico { width: 16px; height: 16px; flex: none; color: var(--muted); animation: none; }
+svg.tab-ico.busy { color: #e8833a; }
+svg.tab-ico.unread { color: var(--accent); }
+svg.tab-ico .orbit { stroke-width: 1.6; stroke-dasharray: 0 3.5; stroke-linecap: round; animation: orbit 1.2s linear infinite; }
+@keyframes orbit { to { stroke-dashoffset: -7; } }
