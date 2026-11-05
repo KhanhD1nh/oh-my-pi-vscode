@@ -6,6 +6,7 @@
 import { spawn, type ChildProcess } from 'node:child_process'
 import { Readable as NodeReadable, Writable as NodeWritable } from 'node:stream'
 import { client as createAcpClientApp, methods, ndJsonStream, PROTOCOL_VERSION } from '@agentclientprotocol/sdk'
+import { ompEnv } from './binary.ts'
 import { Transcript } from './transcript.ts'
 import type { ChatItem, SessionRow } from './types.ts'
 
@@ -62,7 +63,7 @@ export class OmpAgent {
 
   private async spawn(): Promise<void> {
     const exe = await this.command()
-    const child = spawn(exe, ['acp'], { cwd: this.cwd, stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true })
+    const child = spawn(exe, ['acp'], { cwd: this.cwd, env: ompEnv(), stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true })
     this.child = child
     child.stderr?.on('data', (d: Buffer) => { this.events.log(String(d).trimEnd()) })
     child.once('exit', (code) => {
@@ -125,12 +126,21 @@ export class OmpAgent {
   /** Start a fresh omp session in this folder. */
   async newSession(): Promise<void> {
     if (this.rpc === undefined) await this.spawn()
+    // A turn still running belongs to the old session: stop it so it cannot keep the UI busy.
+    if (this.busy) this.cancel()
+    // Carry the user's picks into the new session (omp starts each session on its own defaults).
+    const keep = { model: this.model, thinking: this.thinking }
     const created = await this.rpc!.request(methods.agent.session.new, { cwd: this.cwd, mcpServers: [] }) as { sessionId: string; configOptions?: ConfigOption[] }
     this.sessionId = created.sessionId
+    this.busy = false
     this.readConfig(created.configOptions ?? [])
     this.transcript = new Transcript()
     this.events.reset(this.transcript.items)
     this.events.state()
+    for (const [id, value] of [['model', keep.model], ['thinking', keep.thinking]] as const) {
+      const current = id === 'model' ? this.model : this.thinking
+      if (value !== undefined && value !== current) await this.setOption(id, value).catch(() => {})
+    }
   }
 
   /** omp sessions for this folder, newest first. */
@@ -155,7 +165,9 @@ export class OmpAgent {
   /** Send one prompt and wait for omp to finish the turn. */
   async prompt(text: string, images: { mimeType: string; data: string }[] = []): Promise<void> {
     await this.ensure()
-    this.events.item(this.transcript.user(text))
+    const sessionId = this.sessionId
+    const transcript = this.transcript
+    this.events.item(transcript.user(text))
     this.busy = true
     this.events.state()
     try {
@@ -163,13 +175,16 @@ export class OmpAgent {
         { type: 'text', text },
         ...images.map(i => ({ type: 'image', mimeType: i.mimeType, data: i.data })),
       ]
-      const r = await this.rpc!.request(methods.agent.session.prompt, { sessionId: this.sessionId, prompt }) as { stopReason?: string }
-      if (r?.stopReason === 'refusal') this.events.item(this.transcript.error('omp refused this request.'))
+      const r = await this.rpc!.request(methods.agent.session.prompt, { sessionId, prompt }) as { stopReason?: string }
+      if (r?.stopReason === 'refusal' && this.sessionId === sessionId) this.events.item(transcript.error('omp refused this request.'))
     } catch (error) {
-      this.events.item(this.transcript.error(String((error as Error)?.message ?? error)))
+      if (this.sessionId === sessionId) this.events.item(transcript.error(String((error as Error)?.message ?? error)))
     } finally {
-      this.busy = false
-      this.events.state()
+      // Only the turn of the session on screen controls the busy flag.
+      if (this.sessionId === sessionId) {
+        this.busy = false
+        this.events.state()
+      }
     }
   }
 

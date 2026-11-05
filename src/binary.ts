@@ -89,3 +89,16 @@ export async function installOmp(signal?: AbortSignal): Promise<string> {
 export async function resolveOmp(command: string, signal?: AbortSignal): Promise<string> {
   return findOmp(command) ?? installOmp(signal)
 }
+
+/**
+ * Environment for omp children. VS Code's extension host is Electron and sets ELECTRON_RUN_AS_NODE and
+ * VSCODE_* variables meant for itself; omp must not inherit them.
+ */
+export function ompEnv(base: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = {}
+  for (const [k, v] of Object.entries(base)) {
+    if (k === 'ELECTRON_RUN_AS_NODE' || k === 'ELECTRON_NO_ATTACH_CONSOLE' || k.startsWith('VSCODE_')) continue
+    env[k] = v
+  }
+  return env
+}

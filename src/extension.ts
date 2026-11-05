@@ -129,8 +129,8 @@ class ChatViewProvider implements vscode.WebviewViewProvider {
         case 'listSessions': this.post({ type: 'sessions', rows: await this.getAgent().listSessions() }); return
         case 'loadSession': await this.getAgent().loadSession(m.sessionId); this.post({ type: 'view', view: 'chat' }); return
         case 'loadSettings': await this.refreshSettings(); return
-        case 'setSetting': await this.writeSetting(m.key, () => this.cli.set(this.settings.find(s => s.key === m.key)!, m.value)); return
-        case 'resetSetting': await this.writeSetting(m.key, () => this.cli.reset(m.key)); return
+        case 'setSetting': this.writeSetting(m.key, m.value); return
+        case 'resetSetting': this.resetSetting(m.key); return
         case 'view': return
       }
     } catch (error) {
@@ -151,17 +151,33 @@ class ChatViewProvider implements vscode.WebviewViewProvider {
     }
   }
 
-  private async writeSetting(key: string, op: () => Promise<void>): Promise<void> {
-    this.saving = key; this.failed = { ...this.failed, [key]: '' }
+  /** Writes run one at a time in the background; the UI updates immediately (optimistic). */
+  private writes: Promise<void> = Promise.resolve()
+
+  private writeSetting(key: string, value: AgentSetting['value']): void {
+    const setting = this.settings.find(s => s.key === key)
+    if (setting === undefined) return
+    const previous = setting.value
+    setting.value = value
+    this.failed = { ...this.failed, [key]: '' }
     this.postSettings('ready')
-    try {
-      await op()
-      this.settings = await this.cli.list()
-    } catch (error) {
+    this.writes = this.writes.then(() => this.cli.set(setting, value)).catch((error: unknown) => {
+      setting.value = previous
       this.failed = { ...this.failed, [key]: String((error as Error)?.message ?? error) }
-    }
-    this.saving = ''
-    this.postSettings('ready')
+      this.postSettings('ready')
+    })
+  }
+
+  private resetSetting(key: string): void {
+    this.writes = this.writes.then(async () => {
+      await this.cli.reset(key)
+      // Defaults are only known to omp; re-read once after the reset.
+      this.settings = await this.cli.list()
+      this.postSettings('ready')
+    }).catch((error: unknown) => {
+      this.failed = { ...this.failed, [key]: String((error as Error)?.message ?? error) }
+      this.postSettings('ready')
+    })
   }
 
   async newSession(): Promise<void> {

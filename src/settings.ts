@@ -5,6 +5,7 @@
  */
 import { execFile } from 'node:child_process'
 import { choicesFor, discoverSkills } from './choices.ts'
+import { ompEnv } from './binary.ts'
 
 import type { AgentModelChoice, AgentSetting, AgentSettingValue } from './types.ts'
 
@@ -81,7 +82,7 @@ export function parseModels(json: string): OmpModel[] {
 
 function run(command: string, args: string[], timeoutMs = 60_000): Promise<string> {
   return new Promise((resolve, reject) => {
-    execFile(command, args, { timeout: timeoutMs, windowsHide: true, maxBuffer: 32 * 1024 * 1024 }, (error, stdout, stderr) => {
+    execFile(command, args, { timeout: timeoutMs, env: ompEnv(), windowsHide: true, maxBuffer: 32 * 1024 * 1024 }, (error, stdout, stderr) => {
       if (error) reject(new Error(String(stderr || error.message).trim().slice(0, 500)))
       else resolve(stdout)
     })
@@ -90,6 +91,9 @@ function run(command: string, args: string[], timeoutMs = 60_000): Promise<strin
 
 /** Thin wrapper over the omp CLI for one executable path. */
 export class OmpConfigCli {
+  /** `omp models ls` takes ~10 s; it is fetched once and shared until {@link refreshModels}. */
+  private modelCache: Promise<OmpModel[]> | undefined
+
   constructor(private readonly command: () => Promise<string>) {}
 
   async list(): Promise<OmpSetting[]> {
@@ -121,8 +125,17 @@ export class OmpConfigCli {
     await run(exe, ['config', 'reset', key])
   }
 
-  async models(): Promise<OmpModel[]> {
-    const exe = await this.command()
-    return parseModels(await run(exe, ['models', 'ls', '--json'], 120_000))
+  models(): Promise<OmpModel[]> {
+    this.modelCache ??= this.command()
+      .then(exe => run(exe, ['models', 'ls', '--json'], 120_000))
+      .then(parseModels)
+      .catch((error: unknown) => { this.modelCache = undefined; throw error })
+    return this.modelCache
+  }
+
+  /** Drop the model cache (after provider changes). */
+  refreshModels(): Promise<OmpModel[]> {
+    this.modelCache = undefined
+    return this.models()
   }
 }
