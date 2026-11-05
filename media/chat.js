@@ -74,21 +74,31 @@ function diffEl(d) {
   for (let i = eb + 1; i < Math.min(b.length, eb + 3); i++) rows.push(h('div', { class: 'd ctx' }, '  ' + b[i]))
   return h('div', { class: 'diff' }, rows)
 }
+/** Claude Code–style step: bullet on a timeline, verb + target, then an IN/OUT box (bash) or inline diff (edit). */
 function toolEl(c, key) {
   const open = S.open.has(key)
   const t = toolTarget(c)
+  const bash = c.kind === 'execute'
+  let cmd = ''; try { cmd = JSON.parse(c.input ?? '{}').command ?? '' } catch {}
+  const head = bash && c.title && c.title !== cmd ? c.title : t.text
   const stat = c.diff ? diffStat(c.diff) : null
   const line = h('div', { class: 'tool-line', onclick: () => toggle(key) },
-    h('span', { class: `bullet ${c.status}` }),
     h('span', { class: 'tool-verb' }, VERB[c.kind] ?? VERB.other),
-    h('span', { class: `tool-target${t.file ? ' file' : ''}`, title: t.file ?? t.text, onclick: t.file ? e => { e.stopPropagation(); send({ type: 'openFile', path: t.file }) } : undefined }, t.text),
+    h('span', { class: `tool-target${t.file ? ' file' : ''}`, title: t.file ?? t.text, onclick: t.file ? e => { e.stopPropagation(); send({ type: 'openFile', path: t.file }) } : undefined }, head),
     stat ? h('span', { class: 'tool-stat' }, h('span', { class: 'plus' }, `+${stat.add}`), ' ', h('span', { class: 'minus' }, `-${stat.del}`)) : null)
-  if (!open) return line
-  return h('div', {}, line, h('div', { class: 'tool-detail' },
-    c.title && c.title !== t.text ? h('div', { class: 'muted' }, c.title) : null,
-    c.diff ? [diffEl(c.diff), h('div', { class: 'tool-actions' }, h('a', { onclick: () => send({ type: 'openDiff', tab: S.active, toolId: c.id }) }, 'Open diff'), h('a', { onclick: () => send({ type: 'openFile', path: c.diff.path }) }, 'Open file'))] : null,
-    !c.diff && c.output ? h('pre', {}, c.output.length > 4000 ? c.output.slice(0, 4000) + '\n…' : c.output) : null,
-    !c.diff && !c.output && c.input ? h('pre', { class: 'muted' }, c.input) : null))
+  const clip = (txt, n) => { const l = txt.split('\n'); return !open && l.length > n ? { text: l.slice(0, n).join('\n'), more: l.length - n } : { text: txt.length > 20000 ? txt.slice(0, 20000) + '\n…' : txt } }
+  let body = null
+  if (bash) {
+    const out = c.output ? clip(c.output, 6) : null
+    body = h('div', { class: 'io' },
+      h('div', { class: 'io-row' }, h('span', { class: 'io-k' }, 'IN'), h('pre', { class: 'io-v' }, clip(cmd || c.title || '', 4).text)),
+      out ? h('div', { class: 'io-row' }, h('span', { class: 'io-k' }, 'OUT'), h('div', { class: 'io-v' }, h('pre', {}, out.text), out.more ? h('a', { class: 'io-more', onclick: () => toggle(key) }, `+${out.more} lines`) : null)) : null)
+  } else if (c.diff) {
+    body = h('div', {}, diffEl(c.diff), h('div', { class: 'tool-actions' }, h('a', { onclick: () => send({ type: 'openDiff', tab: S.active, toolId: c.id }) }, 'Open diff'), h('a', { onclick: () => send({ type: 'openFile', path: c.diff.path }) }, 'Open file')))
+  } else if (open && (c.output || c.input)) {
+    body = h('pre', { class: 'tool-out' }, (c.output || c.input).slice(0, 20000))
+  }
+  return h('div', { class: 'tool' }, line, body)
 }
 
 
@@ -107,6 +117,11 @@ let transcriptEl = null
 const nodes = new Map()
 function toggle(key) { S.open.has(key) ? S.open.delete(key) : S.open.add(key); const it = items().find(x => x.id === key); if (it) upsertNode(it) }
 function itemNode(it) {
+  if (it.type === 'user') return h('div', { class: 'msg user', html: md(it.text) })
+  const state = it.type === 'tool' ? it.card.status : it.type === 'error' ? 'failed' : 'text'
+  return h('div', { class: `step ${state}` }, itemBody(it))
+}
+function itemBody(it) {
   switch (it.type) {
     case 'user': return h('div', { class: 'msg user', html: md(it.text) })
     case 'assistant': return h('div', { class: 'msg', html: md(it.text) })

@@ -229,3 +229,32 @@ svg.tab-ico.unread { color: var(--accent); }
 .tab-ico-wrap { display: inline-flex; align-items: center; gap: 1px; flex: none; }
 svg.tab-orbit { width: 9px; height: 9px; flex: none; color: #e8833a; animation: spin 1s linear infinite; }
 svg.tab-orbit circle { fill: currentColor; stroke: none; }
+
+/* ── timeline steps (Claude Code style): dot + vertical rail, IN/OUT boxes ── */
+.transcript { gap: 0; }
+.msg.user { margin: 12px 0 10px; }
+.step { position: relative; padding: 4px 0 10px 22px; }
+.step::before { content: ''; position: absolute; left: 4px; top: 11px; width: 7px; height: 7px; border-radius: 50%; background: var(--muted); z-index: 1; }
+.step::after { content: ''; position: absolute; left: 7px; top: 0; bottom: 0; width: 1px; background: var(--line); }
+.step:has(+ .msg.user)::after, .step:last-of-type::after { bottom: auto; height: 14px; }
+.msg.user + .step::after { top: 11px; }
+.step.completed::before { background: var(--vscode-testing-iconPassed, #3fb950); }
+.step.failed::before { background: var(--vscode-errorForeground); }
+.step.pending::before, .step.in_progress::before { background: var(--accent); animation: pulse 1s ease-in-out infinite; }
+.step .bullet { display: none; }
+.tool-line { margin: 0; padding: 1px 0; gap: 8px; border-radius: 4px; }
+.tool-line:hover { background: none; }
+.tool-line:hover .tool-verb { text-decoration: underline; }
+.tool-target { font-family: inherit; font-size: 0.95em; }
+.tool-target.file { font-family: var(--vscode-editor-font-family); font-size: 0.88em; color: var(--accent); }
+.io { margin-top: 6px; border: 1px solid var(--line); border-radius: var(--radius-sm); overflow: hidden; font-family: var(--vscode-editor-font-family); font-size: 0.85em; }
+.io-row { display: grid; grid-template-columns: 38px 1fr; }
+.io-row + .io-row { border-top: 1px solid var(--line); }
+.io-k { color: var(--muted); font-size: 0.85em; padding: 8px 0 0 10px; letter-spacing: .04em; }
+.io-v { min-width: 0; padding: 6px 10px 6px 0; }
+.io pre { margin: 0; padding: 4px 8px; background: var(--vscode-textCodeBlock-background); border-radius: 4px; white-space: pre-wrap; word-break: break-word; max-height: 320px; overflow: auto; }
+.io-more { display: inline-block; font-size: 0.9em; margin: 4px 0 0 8px; font-family: var(--vscode-font-family); }
+.tool .diff { margin-top: 6px; }
+.tool-out { margin-top: 6px; max-height: 260px; }
+.step .msg p:first-child { margin-top: 0; }
+.working { padding: 6px 0 6px 2px; }

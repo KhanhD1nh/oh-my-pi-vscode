@@ -17,7 +17,7 @@ const items = [
   { type: 'thought', id: 'i2', text: 'Need to read the file first.' },
   { type: 'tool', id: 't-1', card: { id: '1', kind: 'read', name: 'read', title: 'Reading date helper', status: 'completed', path: 'D:/WorkSpace/XE-VN/src/lib/date.ts', output: '1: export function parse(s) {' } },
   { type: 'tool', id: 't-2', card: { id: '2', kind: 'edit', name: 'edit', title: 'Editing date helper', status: 'completed', path: 'D:/WorkSpace/XE-VN/src/lib/date.ts', diff: { path: 'D:/WorkSpace/XE-VN/src/lib/date.ts', oldText: 'export function parse(s) {\n  return new Date(s)\n}', newText: "export function parse(s) {\n  const [d, m, y] = s.split('/')\n  return new Date(+y, +m - 1, +d)\n}" } } },
-  { type: 'tool', id: 't-3', card: { id: '3', kind: 'execute', name: 'bash', title: 'Running tests', status: 'in_progress', input: '{"command":"npx vitest run src/lib"}' } },
+  { type: 'tool', id: 't-3', card: { id: '3', kind: 'execute', name: 'bash', title: 'Run date tests', status: 'completed', input: '{"command":"npx vitest run src/lib"}', output: ' RUN  v3.2.4\n ✓ src/lib/date.test.ts (3 tests) 4ms\n\n Test Files  1 passed (1)\n      Tests  3 passed (3)\n   Start at  10:05:12\n   Duration  412ms\n extra line 1\n extra line 2' } },
   { type: 'assistant', id: 'i3', text: 'Fixed `parse` to read **dd/mm/yyyy** in src/lib/date.ts:2.\n\n- Root cause: `new Date("05/11/2026")` is parsed month-first.\n- Added a regression test.' },
 ]
 const settings = {
