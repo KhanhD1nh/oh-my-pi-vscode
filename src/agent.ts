@@ -254,6 +254,18 @@ export class OmpHost {
     return session
   }
 
+  /** Fork `source` into a new omp session (omp's own `session/fork`); the transcript is copied. */
+  async fork(source: OmpSession): Promise<OmpSession> {
+    await this.ensure()
+    const r = await this.rpc().request(methods.agent.session.fork, { sessionId: source.id, cwd: this.cwd(), mcpServers: [] }) as { sessionId: string; configOptions?: ConfigOption[] }
+    const session = new OmpSession(this, r.sessionId, this.events)
+    session.title = `${source.title ?? 'Chat'} (fork)`
+    session.transcript.copyFrom(source.transcript)
+    session.readConfig(r.configOptions ?? [])
+    this.sessions.set(session.id, session)
+    return session
+  }
+
   /**
    * Close a tab: stop its turn and forget it (the omp session stays in history).
    * @param id - session id.

@@ -117,7 +117,7 @@ let transcriptEl = null
 const nodes = new Map()
 function toggle(key) { S.open.has(key) ? S.open.delete(key) : S.open.add(key); const it = items().find(x => x.id === key); if (it) upsertNode(it) }
 function itemNode(it) {
-  if (it.type === 'user') return h('div', { class: 'msg user', html: md(it.text) })
+  if (it.type === 'user') return h('div', { class: 'user-wrap' }, h('div', { class: 'msg user', html: md(it.text) }), userActions(it))
   const state = it.type === 'tool' ? it.card.status : it.type === 'error' ? 'failed' : 'text'
   return h('div', { class: `step ${state}` }, itemBody(it))
 }
@@ -522,3 +522,14 @@ function piIcon(t) {
   dots.setAttribute('class', 'tab-orbit')
   return h('span', { class: 'tab-ico-wrap' }, pi, dots)
 }
+
+/** Hover actions on a user message: fork the conversation, or rewind file edits made after it. */
+function userActions(it) {
+  const open = S.userMenu === it.id
+  const btn = h('button', { class: 'icon-btn ua-btn', title: 'Fork / rewind', onclick: e => { e.stopPropagation(); S.userMenu = open ? null : it.id; upsertNode(it) } }, svg('<path d="M5 3 2 6l3 3"/><path d="M2 6h7a4 4 0 0 1 0 8H6"/>'))
+  const pick = msg => { S.userMenu = null; upsertNode(it); send(msg) }
+  return h('div', { class: 'ua' }, btn, open ? h('div', { class: 'ua-menu' },
+    h('button', { class: 'menu-item', onclick: () => pick({ type: 'fork', tab: S.active }) }, 'Fork conversation'),
+    h('button', { class: 'menu-item', onclick: () => pick({ type: 'rewind', tab: S.active, itemId: it.id }) }, 'Rewind code to here')) : null)
+}
+document.addEventListener('click', e => { if (S.userMenu && !e.target.closest('.ua')) { const it = items().find(x => x.id === S.userMenu); S.userMenu = null; if (it) upsertNode(it) } })

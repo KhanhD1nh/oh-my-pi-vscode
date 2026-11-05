@@ -210,6 +210,15 @@ class ChatViewProvider implements vscode.WebviewViewProvider {
           this.post({ type: 'view', view: 'chat' })
           return
         }
+        case 'fork': {
+          const t = this.tab(m.tab)
+          if (t === undefined) return
+          const session = await this.hosts.get(t.cwd)!.fork(t.session)
+          this.tabs.push({ session, cwd: t.cwd, unread: false })
+          this.activate(session.id)
+          return
+        }
+        case 'rewind': await this.rewind(m.tab, m.itemId); return
         case 'loadSettings': await this.refreshSettings(); return
         case 'setSetting': this.writeSetting(m.key, m.value); return
         case 'resetSetting': this.resetSetting(m.key); return
@@ -294,6 +303,35 @@ class ChatViewProvider implements vscode.WebviewViewProvider {
     const doc = await vscode.workspace.openTextDocument(uri)
     const pos = new vscode.Position(Math.max(0, (line ?? 1) - 1), 0)
     await vscode.window.showTextDocument(doc, { selection: new vscode.Range(pos, pos), preview: true })
+  }
+
+  /**
+   * Undo file edits omp made after the user message `itemId`, newest first, by reversing each recorded diff.
+   * ponytail: only edits seen as diffs are reverted (not bash side effects); a hunk that no longer matches is skipped and reported.
+   */
+  private async rewind(tabId: string, itemId: string): Promise<void> {
+    const t = this.tab(tabId)
+    if (t === undefined) return
+    const items = t.session.transcript.items
+    const from = items.findIndex(i => i.id === itemId)
+    const edits = items.slice(from + 1).flatMap(i => i.type === 'tool' && i.card.diff ? [i.card.diff] : []).reverse()
+    if (from < 0 || edits.length === 0) { void vscode.window.showInformationMessage('Oh My Pi: no file edits after this message.'); return }
+    const files = [...new Set(edits.map(e => vscode.workspace.asRelativePath(e.path)))]
+    const ok = await vscode.window.showWarningMessage(`Revert ${edits.length} edit(s) in ${files.length} file(s) made after this message?`, { modal: true, detail: files.join('\n') }, 'Rewind')
+    if (ok !== 'Rewind') return
+    const skipped: string[] = []
+    for (const e of edits) {
+      const uri = vscode.Uri.file(e.path)
+      let text: string | undefined
+      try { text = new TextDecoder().decode(await vscode.workspace.fs.readFile(uri)) } catch { text = undefined }
+      if (text === undefined) { if (e.oldText) await vscode.workspace.fs.writeFile(uri, new TextEncoder().encode(e.oldText)); continue }
+      if (!e.oldText && text === e.newText) { await vscode.workspace.fs.delete(uri); continue }
+      const at = text.indexOf(e.newText)
+      if (at < 0) { skipped.push(vscode.workspace.asRelativePath(uri)); continue }
+      await vscode.workspace.fs.writeFile(uri, new TextEncoder().encode(text.slice(0, at) + e.oldText + text.slice(at + e.newText.length)))
+    }
+    if (skipped.length) void vscode.window.showWarningMessage(`Oh My Pi: changed since, not reverted: ${[...new Set(skipped)].join(', ')}`)
+    else void vscode.window.showInformationMessage(`Oh My Pi: reverted ${edits.length} edit(s).`)
   }
 
   private async openDiff(tabId: string, toolId: string): Promise<void> {

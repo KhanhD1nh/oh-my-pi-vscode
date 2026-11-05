@@ -32,3 +32,14 @@ test('reads ACP diff content blocks', () => {
   assert.deepEqual(toolDiff({ content: [{ type: 'diff', path: 'x.ts', oldText: null, newText: 'n' }] }), { path: 'x.ts', oldText: '', newText: 'n' })
   assert.equal(toolDiff({ content: [{ type: 'content', content: { type: 'text', text: 't' } }] }), undefined)
 })
+
+test('copyFrom clones items so the fork can diverge', () => {
+  const a = new Transcript()
+  a.user('hi')
+  const b = new Transcript()
+  b.copyFrom(a)
+  b.user('only in fork')
+  assert.equal(a.items.length, 1)
+  assert.equal(b.items.length, 2)
+  assert.notEqual(b.items[1]!.id, a.items[0]!.id)
+})

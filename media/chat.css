@@ -258,3 +258,14 @@ svg.tab-orbit circle { fill: currentColor; stroke: none; }
 .tool-out { margin-top: 6px; max-height: 260px; }
 .step .msg p:first-child { margin-top: 0; }
 .working { padding: 6px 0 6px 2px; }
+
+/* user message: hover button with fork / rewind menu */
+.user-wrap { position: relative; display: flex; flex-direction: column; align-items: flex-end; margin: 12px 0 10px; }
+.user-wrap .msg.user { margin: 0; }
+.ua { position: relative; height: 0; }
+.ua-btn { position: absolute; right: 0; top: 2px; visibility: hidden; }
+.user-wrap:hover .ua-btn, .ua:has(.ua-menu) .ua-btn { visibility: visible; }
+.ua-menu { position: absolute; right: 0; top: 30px; z-index: 20; min-width: 190px; padding: 4px; background: var(--vscode-quickInput-background, var(--vscode-editorWidget-background)); border: 1px solid var(--vscode-widget-border, var(--line)); border-radius: var(--radius); box-shadow: 0 8px 24px rgba(0,0,0,.35); }
+.user-wrap + .step::after { top: 11px; }
+.step:has(+ .user-wrap)::after { bottom: auto; height: 14px; }
+.user-wrap:hover { padding-bottom: 28px; }

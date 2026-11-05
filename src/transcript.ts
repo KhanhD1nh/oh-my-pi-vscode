@@ -118,4 +118,11 @@ export class Transcript {
 
   /** Tool card by id (for opening its diff). */
   card(id: string): ToolCard | undefined { return this.tools.get(id) }
+
+  /** Start from a copy of `other` (used when forking a session). */
+  copyFrom(other: Transcript): void {
+    this.items.push(...structuredClone(other.items))
+    this.seq = other.seq
+    for (const it of this.items) if (it.type === 'tool') this.tools.set(it.card.id, it.card)
+  }
 }

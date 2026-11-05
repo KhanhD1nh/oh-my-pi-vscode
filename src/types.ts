@@ -95,3 +95,5 @@ export type WebviewMessage =
   | { type: 'setSetting'; key: string; value: AgentSettingValue }
   | { type: 'resetSetting'; key: string }
   | { type: 'findFiles'; query: string }
+  | { type: 'fork'; tab: string }
+  | { type: 'rewind'; tab: string; itemId: string }
