@@ -498,9 +498,12 @@ window.addEventListener('message', ({ data: m }) => {
 render()
 send({ type: 'ready' })
 
-/** Tab icon: π in a square; while running, dots chase around the square's edge. */
+/** Tab icon: π; while running, 3 dots orbit in a small circle to its right. */
 function piIcon(t) {
-  const s = svg(`${t.busy ? '<rect class="orbit" x="1" y="1" width="14" height="14" rx="3"/>' : ''}<path d="M4.6 5.6H11.4M6.6 5.6V11M9.4 5.6V10.2Q9.4 11 10.3 11" stroke-width="1.6"/>`)
-  s.setAttribute('class', `tab-ico${t.busy ? ' busy' : ''}${t.unread ? ' unread' : ''}`)
-  return s
+  const pi = svg('<path d="M3.6 5H12.4M6.2 5V12M9.8 5V11Q9.8 12 11 12" stroke-width="1.7"/>')
+  pi.setAttribute('class', `tab-ico${t.busy ? ' busy' : ''}${t.unread ? ' unread' : ''}`)
+  if (!t.busy) return pi
+  const dots = svg('<circle cx="8" cy="3" r="2"/><circle cx="12.33" cy="10.5" r="2"/><circle cx="3.67" cy="10.5" r="2"/>')
+  dots.setAttribute('class', 'tab-orbit')
+  return h('span', { class: 'tab-ico-wrap' }, pi, dots)
 }
