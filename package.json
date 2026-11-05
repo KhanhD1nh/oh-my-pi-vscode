@@ -1,0 +1,65 @@
+{
+  "name": "oh-my-pi",
+  "displayName": "Oh My Pi",
+  "description": "Chat with the omp coding agent inside VS Code: streaming replies, tool cards, diffs, model picker and every omp setting.",
+  "version": "0.1.0",
+  "publisher": "khanhd1nh",
+  "license": "MIT",
+  "repository": { "type": "git", "url": "https://github.com/KhanhD1nh/oh-my-pi-desktop" },
+  "engines": { "vscode": "^1.95.0" },
+  "categories": ["AI", "Chat", "Programming Languages"],
+  "icon": "media/icon.png",
+  "main": "./dist/extension.js",
+  "activationEvents": ["onStartupFinished"],
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [{ "id": "ohMyPi", "title": "Oh My Pi", "icon": "media/pi.svg" }]
+    },
+    "views": {
+      "ohMyPi": [{ "type": "webview", "id": "ohMyPi.chat", "name": "Chat" }]
+    },
+    "commands": [
+      { "command": "ohMyPi.newSession", "title": "Oh My Pi: New Session", "icon": "$(add)" },
+      { "command": "ohMyPi.history", "title": "Oh My Pi: Session History", "icon": "$(history)" },
+      { "command": "ohMyPi.settings", "title": "Oh My Pi: Settings", "icon": "$(gear)" },
+      { "command": "ohMyPi.focus", "title": "Oh My Pi: Focus Chat" },
+      { "command": "ohMyPi.addSelection", "title": "Oh My Pi: Add Selection to Chat" }
+    ],
+    "menus": {
+      "view/title": [
+        { "command": "ohMyPi.newSession", "when": "view == ohMyPi.chat", "group": "navigation@1" },
+        { "command": "ohMyPi.history", "when": "view == ohMyPi.chat", "group": "navigation@2" },
+        { "command": "ohMyPi.settings", "when": "view == ohMyPi.chat", "group": "navigation@3" }
+      ],
+      "editor/context": [
+        { "command": "ohMyPi.addSelection", "when": "editorHasSelection", "group": "ohMyPi" }
+      ]
+    },
+    "keybindings": [
+      { "command": "ohMyPi.focus", "key": "ctrl+alt+p", "mac": "cmd+alt+p" },
+      { "command": "ohMyPi.addSelection", "key": "ctrl+alt+k", "mac": "cmd+alt+k", "when": "editorHasSelection" }
+    ],
+    "configuration": {
+      "title": "Oh My Pi",
+      "properties": {
+        "ohMyPi.command": { "type": "string", "default": "omp", "description": "omp executable (name on PATH or absolute path). Installed automatically when missing." }
+      }
+    }
+  },
+  "scripts": {
+    "build": "node build.mjs",
+    "watch": "node build.mjs --watch",
+    "test": "node --test --experimental-strip-types test/*.test.ts",
+    "package": "node build.mjs && vsce package --no-dependencies"
+  },
+  "dependencies": {
+    "@agentclientprotocol/sdk": "1.4.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/vscode": "~1.95.0",
+    "@vscode/vsce": "^3.6.0",
+    "esbuild": "^0.25.0",
+    "typescript": "^5.6.0"
+  }
+}
