@@ -144,7 +144,7 @@ const folderName = p => p.replace(/\\/g, '/').split('/').filter(Boolean).pop() ?
 function tabbar() {
   const bar = h('div', { class: 'tabbar' },
     S.tabs.map((t, i) => h('div', { class: `tabchip${t.id === S.active ? ' on' : ''}${t.unread ? ' unread' : ''}`, title: t.title ?? 'New chat', onclick: () => activate(t.id), onauxclick: e => { if (e.button === 1) send({ type: 'closeTab', tab: t.id }) } },
-      t.busy ? h('span', { class: 'spinner sm' }) : h('span', { class: `dot-state${t.unread ? ' unread' : ''}` }),
+      t.busy ? h('span', { class: 'tab-ico busy', title: 'Running' }, '✻') : h('span', { class: `tab-ico${t.unread ? ' unread' : ''}`, title: t.unread ? 'Finished — not viewed yet' : '' }, 'π'),
       h('span', { class: 'tab-label' }, t.title || `Chat ${i + 1}`),
       h('button', { class: 'tab-x', title: 'Close tab', onclick: e => { e.stopPropagation(); send({ type: 'closeTab', tab: t.id }) } }, '×'))),
     h('button', { class: 'icon-btn', title: 'New tab (runs in parallel)', onclick: () => send({ type: 'newTab' }) }, svg(ICON.plus)))

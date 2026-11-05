@@ -210,3 +210,14 @@ select { color: var(--vscode-dropdown-foreground); background: var(--vscode-drop
 .tabchip.unread .tab-label { color: var(--vscode-foreground); font-weight: 600; }
 .spinner.sm { width: 10px; height: 10px; border-width: 1.5px; flex: none; }
 .menu-item .desc { max-width: 60%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* tabs: rectangular, VS Code editor-tab style; ✻ spins while running, π when idle */
+.tabbar { gap: 0; align-items: stretch; }
+.tabchip { height: 30px; border-radius: 0; padding: 0 6px 0 10px; gap: 6px; max-width: 200px; border-right: 1px solid var(--line); border-top: 1px solid transparent; }
+.tabchip.on { background: var(--vscode-input-background); box-shadow: none; border-top-color: var(--vscode-focusBorder); }
+.tab-ico { flex: none; width: 14px; text-align: center; font-size: 13px; line-height: 1; color: var(--muted); }
+.tab-ico.busy { color: #e8833a; animation: spin 2s linear infinite; }
+.tab-ico.unread { color: var(--accent); }
+.tab-x { border-radius: 4px; }
+.tabchip > .icon-btn { border-radius: 4px; }
+.tabchip { min-width: 110px; flex-shrink: 0; }
