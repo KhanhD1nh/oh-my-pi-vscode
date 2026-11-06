@@ -171,9 +171,8 @@ function tabbar() {
       h('span', { class: 'tab-label' }, t.title || `Chat ${i + 1}`),
       h('button', { class: 'tab-x', title: 'Close tab', onclick: e => { e.stopPropagation(); send({ type: 'closeTab', tab: t.id }) } }, svg('<path d="M4.5 4.5l7 7M11.5 4.5l-7 7"/>')))),
     )
-  return h('div', { class: 'topbar' }, bar, h('button', { class: 'icon-btn', title: 'New tab (runs in parallel)', onclick: () => send({ type: 'newTab' }) }, svg(ICON.plus)),
-    h('button', { class: 'icon-btn', title: 'History', onclick: () => go('history') }, svg(ICON.history)),
-    h('button', { class: 'icon-btn', title: 'Settings', onclick: () => go('settings') }, svg(ICON.gear)))
+  // New tab, History and Settings live in VS Code's view title bar (package.json view/title).
+  return h('div', { class: 'topbar tabs-only' }, bar)
 }
 function backbar(title) {
   return h('div', { class: 'topbar' }, h('button', { class: 'back', onclick: () => go('chat') }, svg(ICON.back), 'Back'), h('div', { class: 'title' }, title))

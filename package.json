@@ -2,7 +2,7 @@
   "name": "oh-my-pi",
   "displayName": "Oh My Pi",
   "description": "Chat with the omp coding agent inside VS Code: streaming replies, tool cards, diffs, model picker and every omp setting.",
-  "version": "0.8.0",
+  "version": "0.8.1",
   "publisher": "khanhd1nh",
   "license": "MIT",
   "repository": {
@@ -44,7 +44,7 @@
     "commands": [
       {
         "command": "ohMyPi.newSession",
-        "title": "Oh My Pi: New Session",
+        "title": "Oh My Pi: New Tab",
         "icon": "$(add)"
       },
       {
@@ -67,7 +67,23 @@
       }
     ],
     "menus": {
-      "view/title": [],
+      "view/title": [
+        {
+          "command": "ohMyPi.newSession",
+          "when": "view == ohMyPi.chat",
+          "group": "navigation@0"
+        },
+        {
+          "command": "ohMyPi.history",
+          "when": "view == ohMyPi.chat",
+          "group": "navigation@1"
+        },
+        {
+          "command": "ohMyPi.settings",
+          "when": "view == ohMyPi.chat",
+          "group": "navigation@2"
+        }
+      ],
       "editor/context": [
         {
           "command": "ohMyPi.addSelection",
