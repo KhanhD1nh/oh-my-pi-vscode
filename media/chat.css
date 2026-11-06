@@ -589,3 +589,10 @@ mark.hit.cur { background: #f1fa8c; color: #1f2024; }
 .codeblock.log > pre { max-height: 280px; white-space: pre-wrap; word-break: break-word; font-size: 12px; }
 .msg p, .msg li { overflow-wrap: anywhere; }
 .agent-steps { max-height: 320px; overscroll-behavior: contain; }
+
+/* user bubble: normal padding; the fork button floats over the top-right corner on hover instead of reserving space */
+.msg.user { padding: 8px 12px; }
+.msg.user .ua { top: -10px; right: -8px; z-index: 2; }
+.msg.user .ua-btn { width: 22px; height: 22px; border-radius: 50%; background: var(--vscode-editorWidget-background, var(--vscode-input-background)); border: 1px solid var(--line); box-shadow: 0 2px 6px rgba(0,0,0,.3); }
+.msg.user .ua-btn svg { width: 12px; height: 12px; }
+.msg.user .ua-menu { top: 26px; }
