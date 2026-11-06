@@ -308,12 +308,30 @@ function menuEl() {
   const t = tab()
   if (S.menu === 'model') {
     const q = S.modelQuery.toLowerCase()
-    const by = {}
-    for (const m of S.models) if (!q || m.name.toLowerCase().includes(q) || m.selector.toLowerCase().includes(q)) (by[m.provider] ??= []).push(m)
-    const filter = h('input', { type: 'text', id: 'model-filter', placeholder: 'Filter models…', value: S.modelQuery, oninput: e => { S.modelQuery = e.target.value; const pos = e.target.selectionStart; refreshComposer(); const f = document.getElementById('model-filter'); f.focus(); f.setSelectionRange(pos, pos) }, onkeydown: e => { if (e.key === 'Escape') closeMenu() } })
-    return h('div', { class: 'menu', style: 'left:6px' }, filter,
-      !S.models.length ? h('div', { class: 'menu-group' }, 'Loading models…') : null,
-      Object.entries(by).map(([p, list]) => [h('div', { class: 'menu-group' }, p), list.slice(0, 60).map(m => h('button', { class: `menu-item${m.selector === t.model ? ' active' : ''}`, onclick: () => { send({ type: 'setModel', tab: S.active, value: m.selector }); t.model = m.selector; S.modelQuery = ''; closeMenu() } }, h('span', { class: 'check' }, m.selector === t.model ? '✓' : ''), m.name))]))
+    const tok = n => n >= 1e6 ? `${+(n / 1e6).toFixed(1)}M` : `${Math.round(n / 1e3)}K`
+    const price = m => m.cost && (m.cost.input || m.cost.output) ? `$${+m.cost.input.toFixed(2)}/$${+m.cost.output.toFixed(2)} per Mtok` : ''
+    const detail = m => [m.selector, m.contextWindow ? `${tok(m.contextWindow)} context` : '', price(m)].filter(Boolean).join(' · ')
+    const def = S.models.find(m => m.roles?.includes('default'))
+    // Pinned: models with an omp role, then everything from providers you configured yourself (models.yml), current one always.
+    const own = new Set(S.models.filter(m => m.roles?.length).map(m => m.provider))
+    const pinned = q ? [] : S.models.filter(m => m.roles?.length || own.has(m.provider) || m.selector === t.model)
+    const hits = q ? S.models.filter(m => m.name.toLowerCase().includes(q) || m.selector.toLowerCase().includes(q)).slice(0, 80) : []
+    const pick = sel => { send({ type: 'setModel', tab: S.active, value: sel }); t.model = sel; S.modelQuery = ''; closeMenu() }
+    const row = (m, title, sub) => h('button', { class: `menu-item mode${m.selector === t.model ? ' active' : ''}`, onclick: () => pick(m.selector) },
+      h('span', { class: 'mi-text' }, h('b', {}, title ?? m.name, m.roles?.length && !title ? h('span', { class: 'roles' }, m.roles.filter(r => r !== 'default').slice(0, 3).join(' · ')) : null), h('small', {}, sub ?? detail(m))),
+      h('span', { class: 'check' }, m.selector === t.model ? '✓' : ''))
+    const filter = h('input', { type: 'text', id: 'model-filter', placeholder: `Search all ${S.models.length || ''} models…`, value: S.modelQuery, oninput: e => { S.modelQuery = e.target.value; const pos = e.target.selectionStart; refreshComposer(); const f = document.getElementById('model-filter'); f.focus(); f.setSelectionRange(pos, pos) }, onkeydown: e => { if (e.key === 'Escape') closeMenu() } })
+    const lv = t.thinkingLevels; const cur = lv.indexOf(t.thinking ?? '')
+    return h('div', { class: 'menu models' },
+      h('div', { class: 'menu-group row' }, h('span', {}, 'Select a model')),
+      filter,
+      !S.models.length ? h('div', { class: 'menu-item muted' }, 'Loading models…') : null,
+      def && !q ? row(def, 'Default (recommended)', `Use omp's default model (currently ${def.name})${price(def) ? ' · ' + price(def) : ''}`) : null,
+      pinned.filter(m => m !== def).map(m => row(m)),
+      hits.map(m => row(m)),
+      q && !hits.length ? h('div', { class: 'menu-item muted' }, 'No models match') : null,
+      lv.length ? [h('div', { class: 'menu-sep' }), h('div', { class: 'effort' }, svg(ICON.brain), h('span', {}, 'Effort ', h('span', { class: 'muted' }, `(${cap(t.thinking ?? 'auto')})`)), h('span', { class: 'grow' }),
+        h('span', { class: 'dots' }, lv.map((l, i) => h('button', { class: `dot${i <= cur ? ' on' : ''}${i === cur ? ' cur' : ''}`, title: cap(l), onclick: e => { e.stopPropagation(); send({ type: 'setThinking', tab: S.active, value: l }); t.thinking = l; refreshComposer() } }))))] : null)
   }
   if (S.menu === 'add') {
     return h('div', { class: 'menu', style: 'left:6px;min-width:210px' },

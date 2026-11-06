@@ -77,7 +77,14 @@ export function parseModels(json: string): OmpModel[] {
       id: String(m.id),
       name: String(m.name ?? m.id),
       reasoning: m.reasoning === true || (m.thinking !== null && m.thinking !== undefined),
+      ...typeof m.contextWindow === 'number' ? { contextWindow: m.contextWindow } : {},
+      ...cost(m.cost),
     }))
+}
+
+function cost(c: unknown): { cost?: { input: number; output: number } } {
+  const x = c as { input?: unknown; output?: unknown } | undefined
+  return typeof x?.input === 'number' && typeof x.output === 'number' ? { cost: { input: x.input, output: x.output } } : {}
 }
 
 function run(command: string, args: string[], timeoutMs = 60_000): Promise<string> {
@@ -134,6 +141,15 @@ export class OmpConfigCli {
     this.modelCache ??= this.command()
       .then(exe => run(exe, ['models', 'ls', '--json'], 120_000))
       .then(parseModels)
+      .then(async models => {
+        const exe = await this.command()
+        const roles = JSON.parse(await run(exe, ['config', 'get', 'modelRoles']).catch(() => '{}')) as Record<string, string>
+        for (const [role, sel] of Object.entries(roles)) {
+          const m = models.find(x => x.selector === sel.replace(/:[a-z]+$/u, ''))
+          if (m) (m.roles ??= []).push(role)
+        }
+        return models
+      })
       .catch((error: unknown) => { this.modelCache = undefined; throw error })
     return this.modelCache
   }

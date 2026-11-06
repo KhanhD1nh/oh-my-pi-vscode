@@ -21,6 +21,11 @@ export interface AgentModelChoice {
   id: string
   name: string
   reasoning: boolean
+  contextWindow?: number
+  /** USD per million tokens. */
+  cost?: { input: number; output: number }
+  /** omp role names (default, task, plan…) this model is assigned to. */
+  roles?: string[]
 }
 
 /** Tool call as the chat renders it. */

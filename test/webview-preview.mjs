@@ -8,8 +8,8 @@ const css = readFileSync(new URL('../media/chat.css', import.meta.url), 'utf8')
 const js = readFileSync(new URL('../media/chat.js', import.meta.url), 'utf8')
 const vars = ':root{--vscode-font-family:Segoe UI;--vscode-font-size:13px;--vscode-foreground:#cccccc;--vscode-sideBar-background:#1f2024;--vscode-input-background:#2a2b30;--vscode-input-foreground:#ddd;--vscode-dropdown-background:#2a2b30;--vscode-dropdown-foreground:#ddd;--vscode-descriptionForeground:#8b8d93;--vscode-textLink-foreground:#58a6ff;--vscode-textCodeBlock-background:#16171a;--vscode-button-background:#7c3aed;--vscode-button-hoverBackground:#6d28d9;--vscode-button-foreground:#fff;--vscode-list-hoverBackground:#2c2e33;--vscode-editor-font-family:Consolas;--vscode-errorForeground:#f85149;--vscode-focusBorder:#7c3aed;--vscode-editorWidget-background:#25262b}'
 const models = [
-  { selector: '9router/cx/gpt-6.1-terra', provider: '9router', id: 'cx/gpt-6.1-terra', name: 'GPT-6.1 Terra', reasoning: true },
-  { selector: '9router/cc/claude-sonnet-5-5', provider: '9router', id: 'cc/claude-sonnet-5-5', name: 'Claude Sonnet 5.5', reasoning: true },
+  { selector: '9router/cx/gpt-6.1-terra', provider: '9router', id: 'cx/gpt-6.1-terra', name: 'GPT-6.1 Terra', reasoning: true, contextWindow: 272000, cost: { input: 1, output: 5 }, roles: ['default', 'slow', 'plan'] },
+  { selector: '9router/cc/claude-sonnet-5-5', provider: '9router', id: 'cc/claude-sonnet-5-5', name: 'Claude Sonnet 5.5', reasoning: true, contextWindow: 1000000, cost: { input: 3, output: 15 }, roles: ['task', 'advisor'] },
   { selector: 'openai/gpt-6', provider: 'openai', id: 'gpt-6', name: 'GPT-6', reasoning: true },
 ]
 const items = [
@@ -70,7 +70,7 @@ await page.fill('#input', 'look at @dat')
  console.log('after pick:', await page.inputValue('#input'))
  await page.click('.chip-btn.model')
 await page.waitForTimeout(200)
-await page.screenshot({ path: `${out}/vsc-model.png` })
+await page.screenshot({ path: `${out}/vsc-model.png`, clip: { x: 0, y: 300, width: 440, height: 560 } })
 await post({ type: 'view', view: 'settings' })
 await post(settings)
 await page.waitForTimeout(200)
