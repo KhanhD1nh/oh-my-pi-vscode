@@ -87,3 +87,57 @@ export async function sessionStats(cwd: string, ids: Set<string>): Promise<Recor
   }))
   return out
 }
+
+/** One step a subagent took (tool call or its final text). */
+export interface AgentStep { tool?: string; label: string; status: 'running' | 'done' | 'failed' }
+
+/**
+ * Steps of subagent `name` in omp session `sessionId`: omp keeps each subagent's own session at
+ * <sessions>/<folder>/<ts>_<sessionId>/<name>.jsonl.
+ */
+export async function agentSteps(cwd: string, sessionId: string, name: string): Promise<{ steps: AgentStep[]; model?: string; cost: number } | undefined> {
+  const dir = join(homedir(), '.omp', 'agent', 'sessions', folderKey(cwd))
+  let names: string[]
+  try { names = await fs.readdir(dir) } catch { return undefined }
+  const sessionDir = names.find(n => n.endsWith(`_${sessionId}`) && !n.endsWith('.jsonl'))
+  if (sessionDir === undefined || !/^[\w.-]+$/u.test(name)) return undefined
+  let text: string
+  try { text = await fs.readFile(join(dir, sessionDir, `${name}.jsonl`), 'utf8') } catch { return undefined }
+  return foldSteps(text.split('\n'))
+}
+
+/** Pure fold of a subagent session file into a step list. */
+export function foldSteps(lines: Iterable<string>): { steps: AgentStep[]; model?: string; cost: number } {
+  const steps: AgentStep[] = []
+  const byCall = new Map<string, AgentStep>()
+  let model: string | undefined
+  let cost = 0
+  for (const line of lines) {
+    if (line[0] !== '{') continue
+    let e: { type?: string; usage?: { cost?: { total?: number } }; message?: { role?: string; model?: string; content?: unknown; toolCallId?: string; isError?: boolean; usage?: { cost?: { total?: number } } } }
+    try { e = JSON.parse(line) } catch { continue }
+    if (e.type === 'model_usage') cost += e.usage?.cost?.total ?? 0
+    if (e.type !== 'message' || !e.message) continue
+    const m = e.message
+    if (m.role === 'assistant') {
+      cost += m.usage?.cost?.total ?? 0
+      if (m.model) model = m.model
+      for (const c of (Array.isArray(m.content) ? m.content : []) as { type?: string; id?: string; name?: string; text?: string; arguments?: Record<string, unknown> }[]) {
+        if (c.type === 'toolCall') {
+          const a = c.arguments ?? {}
+          const target = [a.path, a.command, a.query, a.pattern, a.url].find(v => typeof v === 'string') as string | undefined
+          const step: AgentStep = { tool: c.name, label: String(a.i ?? target ?? c.name ?? 'tool').slice(0, 140), status: 'running' }
+          steps.push(step)
+          if (c.id) byCall.set(c.id, step)
+        } else if (c.type === 'text' && c.text?.trim()) {
+          steps.push({ label: c.text.trim().split('\n')[0]!.slice(0, 140), status: 'done' })
+        }
+      }
+    }
+    if (m.role === 'toolResult' && m.toolCallId) {
+      const s = byCall.get(m.toolCallId)
+      if (s) s.status = m.isError ? 'failed' : 'done'
+    }
+  }
+  return { steps, ...model ? { model } : {}, cost }
+}

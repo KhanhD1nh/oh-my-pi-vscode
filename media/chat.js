@@ -99,10 +99,19 @@ function agentEl(c, key, info) {
     h('span', { class: 'tool-verb' }, n > 1 ? `${n} agents` : 'Agent'),
     h('span', { class: 'tool-target' }, c.title),
     h('span', { class: 'tool-stat muted', 'data-t0': running ? String(T0.get(c.id)) : '' }, running ? since(T0.get(c.id)) : c.status === 'failed' ? 'failed' : 'done'))
-  const rows = info.tasks.map(t => h('div', { class: `agent-row ${c.status}` },
-    h('span', { class: 'agent-ico' }, running ? h('span', { class: 'tab-spin' }, SPIN[spinAt]) : c.status === 'failed' ? '✕' : '✓'),
-    h('span', { class: 'agent-name' }, t.name ?? 'task'), t.agent ? h('span', { class: 'agent-kind' }, t.agent) : null,
-    h('span', { class: 'agent-task' }, String(t.task ?? '').split('\n')[0])))
+  const rows = info.tasks.map(t => {
+    const k = `${c.id}:${t.name}`, isOpen = S.open.has(k), got = S.steps?.[k]
+    const row = h('div', { class: `agent-row ${c.status}${isOpen ? ' open' : ''}`, onclick: e => { e.stopPropagation(); toggleAgent(k, c.id, t.name, key) } },
+      h('span', { class: 'agent-ico' }, running ? h('span', { class: 'tab-spin' }, SPIN[spinAt]) : c.status === 'failed' ? '✕' : '✓'),
+      h('span', { class: 'agent-name' }, t.name ?? 'task'), t.agent ? h('span', { class: 'agent-kind' }, t.agent) : null,
+      h('span', { class: 'agent-task' }, String(t.task ?? '').split('\n')[0]),
+      got?.steps.length ? h('span', { class: 'agent-count' }, `${got.steps.filter(s => s.tool).length} steps${got.cost ? ` · $${got.cost.toFixed(2)}` : ''}`) : null)
+    if (!isOpen) return row
+    return h('div', {}, row, h('div', { class: 'agent-steps' },
+      !got ? h('div', { class: 'muted' }, 'Reading subagent log…') : !got.steps.length ? h('div', { class: 'muted' }, 'No steps yet') :
+        got.steps.slice(-40).map(s => h('div', { class: `astep ${s.status}` }, h('span', { class: 'astep-dot' }), s.tool ? h('span', { class: 'astep-tool' }, cap(s.tool)) : null, h('span', { class: 'astep-label' }, s.label))),
+      got?.model ? h('div', { class: 'astep-model muted' }, got.model) : null))
+  })
   return h('div', { class: 'tool agent' }, head, h('div', { class: 'agents' }, rows),
     open && c.output ? h('pre', { class: 'tool-out' }, c.output.slice(0, 20000)) : null,
     !open && c.output && !running ? h('a', { class: 'io-more', onclick: () => toggle(key) }, 'Show result') : null)
@@ -711,6 +720,7 @@ window.addEventListener('message', ({ data: m }) => {
       if (firstLoad || m.status !== 'ready') render(); else renderSettingsList()
       return
     }
+    case 'agentSteps': { (S.steps ??= {})[`${m.toolId}:${m.name}`] = m; const it = items().find(x => x.type === 'tool' && x.card.id === m.toolId); if (it && S.view === 'chat') upsertNode(it); return }
     case 'approval': S.approval = m.value; if (S.view === 'chat') refreshComposer(); return
     case 'view': go(m.view); return
     case 'insert': {
@@ -855,6 +865,24 @@ function bgChip() {
 }
 // live timers on running agent cards
 setInterval(() => { for (const el of document.querySelectorAll('[data-t0]')) if (el.dataset.t0) el.textContent = since(Number(el.dataset.t0)) }, 1000)
+
+
+/** Open/close one subagent row; while open and running, re-read its log every 2s. */
+const agentPolls = new Map()
+function toggleAgent(k, toolId, name, cardKey) {
+  if (S.open.has(k)) { S.open.delete(k); clearInterval(agentPolls.get(k)); agentPolls.delete(k) }
+  else {
+    S.open.add(k)
+    const ask = () => send({ type: 'agentSteps', tab: S.active, toolId, name })
+    ask()
+    agentPolls.set(k, setInterval(() => {
+      const it = items().find(x => x.id === cardKey)
+      if (!S.open.has(k) || !it || (it.card.status !== 'pending' && it.card.status !== 'in_progress')) { clearInterval(agentPolls.get(k)); agentPolls.delete(k); if (S.open.has(k)) ask() }
+      else ask()
+    }, 2000))
+  }
+  const it = items().find(x => x.id === cardKey); if (it) upsertNode(it)
+}
 
 // boot last: every const above must exist before the first render
 render()

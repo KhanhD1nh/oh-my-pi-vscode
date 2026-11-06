@@ -116,6 +116,7 @@ export type HostMessage =
   | { type: 'insert'; text: string }
   | { type: 'files'; query: string; files: string[] }
   | { type: 'approval'; value: string }
+  | { type: 'agentSteps'; toolId: string; name: string; steps: { tool?: string; label: string; status: 'running' | 'done' | 'failed' }[]; model?: string; cost: number }
 
 /** Webview → host messages. */
 export type WebviewMessage =
@@ -138,6 +139,7 @@ export type WebviewMessage =
   | { type: 'findFiles'; query: string }
   | { type: 'fork'; tab: string }
   | { type: 'setApproval'; value: string }
+  | { type: 'agentSteps'; tab: string; toolId: string; name: string }
   | { type: 'addSelection' }
   | { type: 'answer'; tab: string; itemId: string; action: 'accept' | 'decline' | 'cancel'; content?: Record<string, AskValue> }
   | { type: 'rewind'; tab: string; itemId: string }

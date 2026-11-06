@@ -1,7 +1,7 @@
 /** Session file fold: costs, prompts, lines changed; omp folder key. */
 import { strict as assert } from 'node:assert'
 import { test } from 'node:test'
-import { folderKey, foldSession } from '../src/stats.ts'
+import { folderKey, foldSession, foldSteps } from '../src/stats.ts'
 
 test('folderKey matches omp layout', () => {
   assert.equal(folderKey('D:\\code\\app'), '--D--code-app--')
@@ -22,4 +22,16 @@ test('foldSession sums cost, counts prompts and diff lines', () => {
   assert.deepEqual([s.added, s.removed], [2, 1])
   assert.equal(s.wallMs, 60_000)
   assert.equal(s.model, 'cx/gpt')
+})
+
+test('foldSteps pairs tool calls with results', () => {
+  const lines = [
+    JSON.stringify({ type: 'message', message: { role: 'assistant', model: 'cx/luna', content: [{ type: 'toolCall', id: 'a', name: 'read', arguments: { i: 'Read routes' } }, { type: 'toolCall', id: 'b', name: 'grep', arguments: { pattern: 'Route' } }] } }),
+    JSON.stringify({ type: 'message', message: { role: 'toolResult', toolCallId: 'a' } }),
+    JSON.stringify({ type: 'message', message: { role: 'toolResult', toolCallId: 'b', isError: true } }),
+    JSON.stringify({ type: 'message', message: { role: 'assistant', content: [{ type: 'text', text: 'Found 12 routes\nmore' }] } }),
+  ]
+  const r = foldSteps(lines)
+  assert.deepEqual(r.steps.map(s => [s.tool, s.label, s.status]), [['read', 'Read routes', 'done'], ['grep', 'Route', 'failed'], [undefined, 'Found 12 routes', 'done']])
+  assert.equal(r.model, 'cx/luna')
 })

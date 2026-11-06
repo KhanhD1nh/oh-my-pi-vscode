@@ -8,7 +8,7 @@ import * as vscode from 'vscode'
 import { OmpHost, type OmpSession } from './agent.ts'
 import { resolveOmp } from './binary.ts'
 import { OmpConfigCli } from './settings.ts'
-import { sessionStats } from './stats.ts'
+import { agentSteps, sessionStats } from './stats.ts'
 import type { AgentModelChoice, AgentSetting, HostMessage, TabState, WebviewMessage } from './types.ts'
 
 const DIFF_SCHEME = 'oh-my-pi-diff'
@@ -325,6 +325,12 @@ class ChatViewProvider implements vscode.WebviewViewProvider {
         case 'addSelection': this.addSelection(); return
         case 'answer': this.tab(m.tab)?.session.answer(m.itemId, m.action, m.content); return
         case 'rewind': await this.rewind(m.tab, m.itemId); return
+        case 'agentSteps': {
+          const t = this.tab(m.tab)
+          const got = t ? await agentSteps(t.cwd, t.session.id, m.name) : undefined
+          if (got) reply({ type: 'agentSteps', toolId: m.toolId, name: m.name, ...got })
+          return
+        }
         case 'loadSettings': await this.refreshSettings(); return
         case 'setSetting': this.writeSetting(m.key, m.value); return
         case 'resetSetting': this.resetSetting(m.key); return
