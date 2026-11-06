@@ -14,8 +14,8 @@ body {
 button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; }
 a { color: var(--accent); cursor: pointer; text-decoration: none; }
 a:hover { text-decoration: underline; }
-code { font-family: var(--vscode-editor-font-family); font-size: 0.9em; background: var(--soft); padding: 1px 5px; border-radius: 4px; }
-pre { margin: 8px 0; padding: 10px 12px; overflow: auto; background: var(--vscode-textCodeBlock-background); border-radius: var(--radius-sm); font-family: var(--vscode-editor-font-family); font-size: 0.88em; line-height: 1.45; }
+code { font-family: var(--mono); font-size: 0.9em; background: var(--soft); padding: 1px 5px; border-radius: 4px; }
+pre { margin: 8px 0; padding: 10px 12px; overflow: auto; background: var(--vscode-textCodeBlock-background); border-radius: var(--radius-sm); font-family: var(--mono); font-size: 0.88em; line-height: 1.45; }
 pre code { background: none; padding: 0; }
 :focus-visible { outline: 1px solid var(--vscode-focusBorder); outline-offset: 1px; }
 .muted { color: var(--muted); }
@@ -68,15 +68,15 @@ pre code { background: none; padding: 0; }
 .bullet.failed { background: var(--vscode-errorForeground); }
 .bullet.pending, .bullet.in_progress { background: var(--accent); animation: pulse 1s ease-in-out infinite; }
 .tool-verb { font-weight: 600; flex: none; }
-.tool-target { color: var(--muted); font-family: var(--vscode-editor-font-family); font-size: 0.9em; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tool-target { color: var(--muted); font-family: var(--mono); font-size: 0.9em; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tool-target.file:hover { color: var(--accent); text-decoration: underline; }
-.tool-stat { margin-left: auto; flex: none; font-family: var(--vscode-editor-font-family); font-size: 0.85em; }
+.tool-stat { margin-left: auto; flex: none; font-family: var(--mono); font-size: 0.85em; }
 .plus { color: var(--vscode-testing-iconPassed, #3fb950); }
 .minus { color: var(--vscode-errorForeground); }
 .tool-detail { margin: 2px 0 6px 15px; border-left: 2px solid var(--line); padding-left: 10px; }
 .tool-detail pre { margin: 4px 0; max-height: 260px; }
 .tool-actions { display: flex; gap: 10px; font-size: 0.9em; margin: 2px 0; }
-.diff { font-family: var(--vscode-editor-font-family); font-size: 0.85em; border-radius: var(--radius-sm); overflow: auto; max-height: 320px; background: var(--vscode-textCodeBlock-background); }
+.diff { font-family: var(--mono); font-size: 0.85em; border-radius: var(--radius-sm); overflow: auto; max-height: 320px; background: var(--vscode-textCodeBlock-background); }
 .d { white-space: pre; padding: 0 10px; }
 .d.add { background: var(--vscode-diffEditor-insertedLineBackground, rgba(46,160,67,.18)); }
 .d.del { background: var(--vscode-diffEditor-removedLineBackground, rgba(248,81,73,.18)); }
@@ -153,7 +153,7 @@ select { color: var(--vscode-dropdown-foreground); background: var(--vscode-drop
 .row.wide { flex-direction: column; align-items: stretch; }
 .meta { min-width: 0; flex: 1; }
 .name { font-weight: 500; }
-.key { color: var(--muted); font-family: var(--vscode-editor-font-family); font-size: 0.8em; word-break: break-all; }
+.key { color: var(--muted); font-family: var(--mono); font-size: 0.8em; word-break: break-all; }
 .desc { color: var(--muted); font-size: 0.86em; margin-top: 2px; }
 .control { display: flex; gap: 6px; align-items: center; justify-content: flex-end; flex: none; max-width: 55%; }
 .row.wide .control { max-width: none; justify-content: flex-start; flex-wrap: wrap; }
@@ -246,8 +246,8 @@ svg.tab-orbit circle { fill: currentColor; stroke: none; }
 .tool-line:hover { background: none; }
 .tool-line:hover .tool-verb { text-decoration: underline; }
 .tool-target { font-family: inherit; font-size: 0.95em; }
-.tool-target.file { font-family: var(--vscode-editor-font-family); font-size: 0.88em; color: var(--accent); }
-.io { margin-top: 6px; border: 1px solid var(--line); border-radius: var(--radius-sm); overflow: hidden; font-family: var(--vscode-editor-font-family); font-size: 0.85em; }
+.tool-target.file { font-family: var(--mono); font-size: 0.88em; color: var(--accent); }
+.io { margin-top: 6px; border: 1px solid var(--line); border-radius: var(--radius-sm); overflow: hidden; font-family: var(--mono); font-size: 0.85em; }
 .io-row { display: grid; grid-template-columns: 38px 1fr; }
 .io-row + .io-row { border-top: 1px solid var(--line); }
 .io-k { color: var(--muted); font-size: 0.85em; padding: 8px 0 0 10px; letter-spacing: .04em; }
@@ -284,7 +284,7 @@ svg.tab-ico.busy, svg.tab-ico.unread, .tabchip.on svg.tab-ico { opacity: 1; }
 svg.tab-orbit { color: #bd93f9; }
 svg.tab-ico.unread { color: #bd93f9; }
 
-.tab-spin { flex: none; width: 10px; color: #bd93f9; font-family: var(--vscode-editor-font-family); font-size: 13px; line-height: 1; text-align: center; }
+.tab-spin { flex: none; width: 10px; color: #bd93f9; font-family: var(--mono); font-size: 13px; line-height: 1; text-align: center; }
 
 /* omp ask form */
 .ask { border: 1px solid var(--vscode-focusBorder); border-radius: var(--radius); padding: 10px 12px; display: flex; flex-direction: column; gap: 10px; background: var(--vscode-input-background); }
@@ -301,7 +301,7 @@ svg.tab-ico.unread { color: #bd93f9; }
 .ask-opt > span:last-child { display: flex; flex-direction: column; }
 .ask-opt b { font-weight: 500; }
 .ask-opt small { color: var(--muted); font-size: 0.88em; }
-.ask-key { color: var(--muted); font-family: var(--vscode-editor-font-family); font-size: 0.85em; margin-top: 1px; }
+.ask-key { color: var(--muted); font-family: var(--mono); font-size: 0.85em; margin-top: 1px; }
 .ask-text { width: 100%; resize: vertical; }
 .ask-actions { display: flex; justify-content: flex-end; gap: 8px; }
 .ask-submit { background: var(--vscode-button-background); color: var(--vscode-button-foreground); padding: 4px 14px; border-radius: var(--radius-sm); }
@@ -379,3 +379,22 @@ img.thumb { cursor: zoom-in; }
 
 .topbar.tabs-only { padding: 0 8px; min-height: 30px; }
 .tabchip .tab-label { flex: 1; min-width: 0; } .tabchip .tab-x { margin-left: auto; }
+
+/* type: own mono stack (VS Code's editor font var can be unusable in webviews → serif), one step larger */
+body {
+  --mono: 'Cascadia Code', 'Cascadia Mono', 'JetBrains Mono', Consolas, 'SF Mono', Menlo, 'Courier New', monospace;
+  font-family: var(--vscode-font-family, 'Segoe UI', system-ui, sans-serif);
+  font-size: calc(var(--vscode-font-size, 13px) + 1px);
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+code, pre, .diff, .io, .tool-target.file, .key { font-family: var(--mono); }
+pre, .diff { font-size: 12.5px; line-height: 1.5; }
+code { font-size: 0.88em; }
+.io { font-size: 12.5px; }
+.io pre { font-size: inherit; }
+.io-k { font-size: 11px; padding-top: 9px; }
+.tool-target { font-size: 0.93em; }
+.tool-target.file { font-size: 12.5px; }
+.composer textarea { font-size: inherit; }
+.chip-btn { font-size: 0.9em; }
