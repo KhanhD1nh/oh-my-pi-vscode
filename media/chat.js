@@ -339,10 +339,22 @@ function composer() {
     onkeydown: e => {
       if ((S.menu === 'slash' || S.menu === 'files') && ['ArrowDown', 'ArrowUp', 'Enter', 'Tab'].includes(e.key)) return menuKey(e)
       if (e.key === 'Tab' && e.shiftKey) { e.preventDefault(); cycleMode(); return }
+      // ↑ on the first line / ↓ on the last line walk through prompts already sent in this chat.
+      if ((e.key === 'ArrowUp' && !ta.value.slice(0, ta.selectionStart).includes('\n')) || (e.key === 'ArrowDown' && S.histAt !== undefined && !ta.value.slice(ta.selectionEnd).includes('\n'))) {
+        const past = items().filter(x => x.type === 'user' && x.text).map(x => x.text)
+        if (!past.length) return
+        if (S.histAt === undefined) { if (e.key === 'ArrowDown') return; S.histDraft = ta.value; S.histAt = past.length }
+        S.histAt = Math.max(0, Math.min(past.length, S.histAt + (e.key === 'ArrowUp' ? -1 : 1)))
+        e.preventDefault()
+        ta.value = S.histAt === past.length ? (S.histDraft ?? '') : past[S.histAt]
+        if (S.histAt === past.length) S.histAt = undefined
+        autosize(ta); syncAction(); ta.setSelectionRange(ta.value.length, ta.value.length)
+        return
+      }
       if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); submit() }
       if (e.key === 'Escape') { if (S.menu) closeMenu(); else if (t.busy) send({ type: 'cancel', tab: S.active }) }
     },
-    oninput: () => { autosize(ta); updateInlineMenus(ta); syncAction() },
+    oninput: () => { S.histAt = undefined; autosize(ta); updateInlineMenus(ta); syncAction() },
     onpaste: e => {
       for (const f of e.clipboardData?.files ?? []) if (f.type.startsWith('image/')) {
         e.preventDefault()
@@ -426,7 +438,10 @@ function menuEl() {
     return h('div', { class: 'menu', style: 'left:6px;min-width:210px' },
       h('button', { class: 'menu-item', onclick: () => { closeMenu(); pickImage() } }, svg(ICON.image), 'Upload image'),
       h('button', { class: 'menu-item', onclick: () => { closeMenu(); insertAtEnd('@') } }, h('span', { class: 'mi-ico' }, '@'), 'Mention a file'),
-      h('button', { class: 'menu-item', onclick: () => { closeMenu(); send({ type: 'addSelection' }) } }, svg(MI.code), 'Add editor selection'))
+      h('button', { class: 'menu-item', onclick: () => { closeMenu(); send({ type: 'addSelection' }) } }, svg(MI.code), 'Add editor selection'),
+      h('div', { class: 'menu-sep' }),
+      h('button', { class: 'menu-item', onclick: () => { closeMenu(); openFind() } }, h('span', { class: 'mi-ico' }, '⌕'), 'Find in chat', h('span', { class: 'desc' }, 'Ctrl+F')),
+      h('button', { class: 'menu-item', onclick: () => { closeMenu(); send({ type: 'exportChat', tab: S.active, markdown: chatMarkdown() }) } }, h('span', { class: 'mi-ico' }, '⇩'), 'Export chat to Markdown'))
   }
   if (S.menu === 'mode') {
     const plan = t.mode === 'plan'
@@ -500,7 +515,7 @@ function submit() {
   const text = ta.value.trim()
   if ((!text && !S.images.length) || !S.active) return
   send({ type: 'prompt', tab: S.active, text, images: S.images.map(({ mimeType, data }) => ({ mimeType, data })) })
-  ta.value = ''; S.images = []; S.menu = null; S.drafts[S.active] = ''
+  ta.value = ''; S.images = []; S.menu = null; S.drafts[S.active] = ''; S.histAt = undefined
   refreshComposer()
 }
 
@@ -748,7 +763,9 @@ window.addEventListener('message', ({ data: m }) => {
     case 'insert': {
       if (S.view !== 'chat') go('chat')
       const ta = document.getElementById('input')
-      ta.value = (ta.value ? ta.value + '\n' : '') + m.text; autosize(ta); ta.focus()
+      // Dropped @mentions continue the line; added selections start a new one.
+      const sep = !ta.value ? '' : m.inline ? (/\s$/.test(ta.value) ? '' : ' ') : '\n'
+      ta.value = ta.value + sep + m.text; autosize(ta); syncAction(); ta.focus()
     }
   }
 })
@@ -780,7 +797,29 @@ let spinAt = 0
 setInterval(() => { spinAt = (spinAt + 1) % SPIN.length; for (const el of document.querySelectorAll('.tab-spin')) el.textContent = SPIN[spinAt] }, 80)
 
 /** omp `ask` tool: a form of choices; the answer goes back to omp. */
+/** omp's plan approval arrives as a one-question ask: "Approve plan "<file>" and start implementation?" + plan head. */
+function planApproval(it) {
+  const m = /^Approve plan "([^"]+)" and start implementation\?\n\n?([\s\S]*)$/u.exec(it.message ?? '')
+  const props = Object.entries(it.schema.properties ?? {})
+  if (!m || props.length !== 1) return null
+  const [key, p] = props[0]
+  const values = p.enum ?? p.oneOf?.map(o => o.const) ?? []
+  if (values.length < 2) return null
+  const yes = values.find(v => /approve|accept|yes|start|implement/i.test(v)) ?? values[0]
+  const no = values.find(v => v !== yes)
+  const answer = v => send({ type: 'answer', tab: S.active, itemId: it.id, action: 'accept', content: { [key]: v } })
+  const picked = it.answer?.content?.[key]
+  return h('div', { class: `plan-card${it.answer ? ' done' : ''}` },
+    h('div', { class: 'plan-head' }, svg(MI.plan), h('b', {}, 'Plan ready'), h('span', { class: 'muted' }, m[1])),
+    h('div', { class: 'plan-body msg', html: md(m[2]) }),
+    it.answer ? h('div', { class: 'plan-result' }, it.answer.action !== 'accept' ? 'Skipped' : picked === yes ? h('span', { class: 'plus' }, '✓ Approved — implementing') : h('span', { class: 'minus' }, '✕ Kept planning'))
+      : h('div', { class: 'plan-actions' },
+        h('button', { class: 'ask-submit', onclick: () => answer(yes) }, 'Approve & start'),
+        no ? h('button', { class: 'ask-skip', onclick: () => answer(no) }, 'Keep planning') : null))
+}
 function askEl(it) {
+  const plan = planApproval(it)
+  if (plan) return plan
   const props = Object.entries(it.schema.properties ?? {})
   const opts = p => p.oneOf?.map(o => ({ v: o.const, t: o.title, d: o.description })) ?? p.enum?.map(v => ({ v, t: v })) ?? p.items?.anyOf?.map(o => ({ v: o.const, t: o.title, d: o.description })) ?? p.items?.enum?.map(v => ({ v, t: v })) ?? null
   if (it.answer) {
@@ -962,6 +1001,83 @@ document.addEventListener('keydown', e => {
   if (n >= 1 && n <= opts.length) { e.preventDefault(); send({ type: 'permit', tab: S.active, itemId: open.id, optionId: opts[n - 1].optionId }) }
   else if (e.key === 'Escape') { e.preventDefault(); send({ type: 'permit', tab: S.active, itemId: open.id }) }
 })
+
+
+// ───────────── drag & drop ─────────────
+// Images become attachments; files dragged from the VS Code explorer or the OS become @mentions.
+// Shift must be held while dropping into a webview in VS Code (editor drop rule), so the hint says so.
+let dragDepth = 0
+const dropHint = () => document.getElementById('composer')?.classList.toggle('drop', dragDepth > 0)
+document.addEventListener('dragenter', e => { if (S.view !== 'chat') return; e.preventDefault(); dragDepth++; dropHint() })
+document.addEventListener('dragleave', () => { dragDepth = Math.max(0, dragDepth - 1); dropHint() })
+document.addEventListener('dragover', e => { if (S.view === 'chat') e.preventDefault() })
+document.addEventListener('drop', e => {
+  if (S.view !== 'chat') return
+  e.preventDefault(); dragDepth = 0; dropHint()
+  const dt = e.dataTransfer; if (!dt) return
+  const paths = []
+  for (const f of dt.files ?? []) {
+    if (f.type.startsWith('image/')) { const r = new FileReader(); r.onload = () => { S.images.push({ mimeType: f.type, data: String(r.result).split(',')[1], url: r.result }); refreshComposer() }; r.readAsDataURL(f) }
+    else if (f.path) paths.push(f.path)
+  }
+  const uris = (dt.getData('text/uri-list') || dt.getData('application/vnd.code.uri-list') || '').split(/\r?\n/u).filter(u => u && !u.startsWith('#'))
+  for (const u of uris) { try { const url = new URL(u); if (url.protocol === 'file:') paths.push(decodeURIComponent(url.pathname.replace(/^\/([A-Za-z]:)/u, '$1'))) } catch {} }
+  if (paths.length) send({ type: 'mentionPaths', paths })
+})
+
+// ───────────── find in chat (Ctrl+F) and export ─────────────
+function findBar() {
+  const input = h('input', { type: 'search', id: 'find-input', placeholder: 'Find in chat…', value: S.find ?? '', oninput: e => { S.find = e.target.value; S.findAt = 0; runFind() }, onkeydown: e => { if (e.key === 'Enter') { S.findAt = (S.findAt ?? 0) + (e.shiftKey ? -1 : 1); runFind() } if (e.key === 'Escape') closeFind() } })
+  return h('div', { class: 'findbar', id: 'findbar' }, input, h('span', { class: 'muted find-count', id: 'find-count' }),
+    h('button', { class: 'icon-btn', title: 'Previous (Shift+Enter)', onclick: () => { S.findAt--; runFind() } }, '↑'),
+    h('button', { class: 'icon-btn', title: 'Next (Enter)', onclick: () => { S.findAt++; runFind() } }, '↓'),
+    h('button', { class: 'icon-btn', title: 'Close (Esc)', onclick: closeFind }, '×'))
+}
+function openFind() { if (S.view !== 'chat' || !transcriptEl) return; if (!document.getElementById('findbar')) transcriptEl.before(findBar()); const i = document.getElementById('find-input'); i.focus(); i.select(); runFind() }
+function closeFind() { document.getElementById('findbar')?.remove(); S.find = ''; clearMarks(); document.getElementById('input')?.focus() }
+function clearMarks() { for (const m of transcriptEl?.querySelectorAll('mark.hit') ?? []) m.replaceWith(document.createTextNode(m.textContent)); transcriptEl?.normalize() }
+function runFind() {
+  clearMarks()
+  const q = (S.find ?? '').toLowerCase(), count = document.getElementById('find-count')
+  if (!q || !transcriptEl) { if (count) count.textContent = ''; return }
+  // Find covers what is rendered; older items load when you click "Show earlier".
+  const hits = []
+  const walker = document.createTreeWalker(transcriptEl, NodeFilter.SHOW_TEXT, { acceptNode: n => n.parentElement?.closest('button, .copy') ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT })
+  const texts = []; while (walker.nextNode()) texts.push(walker.currentNode)
+  for (const t of texts) {
+    let v = t.nodeValue, i = v.toLowerCase().indexOf(q), node = t
+    while (i >= 0) {
+      const mid = node.splitText(i), rest = mid.splitText(q.length)
+      const m = document.createElement('mark'); m.className = 'hit'; m.textContent = mid.nodeValue; mid.replaceWith(m); hits.push(m)
+      node = rest; v = rest.nodeValue; i = v.toLowerCase().indexOf(q)
+    }
+  }
+  if (count) count.textContent = hits.length ? `${((S.findAt % hits.length) + hits.length) % hits.length + 1}/${hits.length}` : '0'
+  if (!hits.length) return
+  const cur = hits[((S.findAt % hits.length) + hits.length) % hits.length]
+  cur.classList.add('cur'); cur.scrollIntoView({ block: 'center' })
+}
+document.addEventListener('keydown', e => {
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'f' && MODE === 'panel') { e.preventDefault(); openFind() }
+})
+
+/** Markdown of this chat: prompts, replies, tool lines with their commands; thinking left out. */
+function chatMarkdown() {
+  const t = tab()
+  const out = [`# ${(t.title ?? 'OMP chat').replace(/^\S*\s*ESC:\s*/u, '')}`, '']
+  for (const it of items()) {
+    if (it.type === 'user') out.push('## You', '', it.text, '')
+    else if (it.type === 'assistant') out.push(it.text, '')
+    else if (it.type === 'error') out.push(`> **Error:** ${it.text}`, '')
+    else if (it.type === 'tool') {
+      const c = it.card; let cmd = ''; try { cmd = JSON.parse(c.input ?? '{}').command ?? '' } catch {}
+      out.push(`- **${VERB[c.kind] ?? c.name}** ${c.path ?? c.title}${c.status === 'failed' ? ' _(failed)_' : ''}`)
+      if (cmd) out.push('', '  ```sh', ...cmd.split('\n').map(l => '  ' + l), '  ```')
+      out.push('')
+    } else if (it.type === 'ask' && it.answer?.content) out.push(`> ${it.message.split('\n')[0]} → ${Object.values(it.answer.content).flat().join(', ')}`, '')
+  }
+  return out.join('\n')
+}
 
 // boot last: every const above must exist before the first render
 render()

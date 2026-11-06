@@ -360,6 +360,21 @@ class ChatViewProvider implements vscode.WebviewViewProvider {
           for (const x of this.tabs) this.postTab(x.session.id, { type: 'approval', value: m.value })
           return
         case 'addSelection': this.addSelection(); return
+        case 'mentionPaths': {
+          // Workspace files become relative @paths; anything outside stays absolute.
+          const rel = m.paths.map(p => { const r = vscode.workspace.asRelativePath(vscode.Uri.file(p), false).replace(/\\/gu, '/'); return /^[A-Za-z]:\//u.test(r) || r.startsWith('/') ? p : r })
+          reply({ type: 'insert', inline: true, text: rel.map(r => `@${r.includes(' ') ? `"${r}"` : r}`).join(' ') + ' ' })
+          return
+        }
+        case 'exportChat': {
+          const t = this.tab(m.tab)
+          const name = (t?.session.title ?? 'omp-chat').replace(/[^\p{L}\p{N}]+/gu, '-').replace(/^-|-$/gu, '').slice(0, 60) || 'omp-chat'
+          const target = await vscode.window.showSaveDialog({ defaultUri: vscode.Uri.joinPath(vscode.Uri.file(t?.cwd ?? this.currentFolder()), `${name}.md`), filters: { Markdown: ['md'] } })
+          if (!target) return
+          await vscode.workspace.fs.writeFile(target, new TextEncoder().encode(m.markdown))
+          void vscode.window.showInformationMessage(`Chat exported to ${vscode.workspace.asRelativePath(target)}`, 'Open').then(p => { if (p) void vscode.window.showTextDocument(target) })
+          return
+        }
         case 'permit': this.tab(m.tab)?.session.choose(m.itemId, m.optionId); return
         case 'answer': this.tab(m.tab)?.session.answer(m.itemId, m.action, m.content); return
         case 'rewind': await this.rewind(m.tab, m.itemId); return

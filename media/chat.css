@@ -565,3 +565,22 @@ code { font-size: 0.88em; }
 .perm-btn.reject_once, .perm-btn.reject_always { color: var(--vscode-errorForeground); }
 .perm-btn.cancel { color: var(--muted); margin-left: auto; }
 .perm-btn .kbd { font-size: 0.8em; opacity: .7; font-family: var(--mono); }
+
+/* plan approval */
+.plan-card { border: 1px solid var(--vscode-focusBorder); border-radius: var(--radius); padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; background: var(--vscode-input-background); }
+.plan-card.done { border-color: var(--line); background: none; }
+.plan-head { display: flex; align-items: center; gap: 8px; }
+.plan-head svg { width: 15px; height: 15px; color: var(--accent); }
+.plan-body { max-height: 320px; overflow: auto; padding: 8px 10px; border-radius: var(--radius-sm); background: var(--vscode-textCodeBlock-background); font-size: 0.93em; }
+.plan-card.done .plan-body { max-height: 120px; opacity: .8; }
+.plan-actions { display: flex; gap: 8px; justify-content: flex-end; }
+
+/* drop target */
+.composer.drop { border-color: var(--vscode-focusBorder); border-style: dashed; background: color-mix(in srgb, var(--vscode-focusBorder) 8%, var(--vscode-input-background)); }
+.composer.drop::after { content: 'Drop files to mention them (hold Shift while dropping from VS Code)'; position: absolute; inset: 0; display: grid; place-items: center; font-size: 0.9em; color: var(--muted); pointer-events: none; }
+/* find bar */
+.findbar { display: flex; align-items: center; gap: 4px; padding: 6px 12px; border-bottom: 1px solid var(--line); background: var(--vscode-sideBar-background); animation: drop .15s var(--ease); }
+.findbar input { flex: 1; min-width: 0; }
+.find-count { font-size: 0.8em; min-width: 36px; text-align: right; font-variant-numeric: tabular-nums; }
+mark.hit { background: color-mix(in srgb, #f1fa8c 35%, transparent); color: inherit; border-radius: 2px; }
+mark.hit.cur { background: #f1fa8c; color: #1f2024; }
