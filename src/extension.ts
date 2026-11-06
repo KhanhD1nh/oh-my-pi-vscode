@@ -4,11 +4,14 @@
  * open file, diff view, @-file mentions, add selection, permission prompts).
  */
 import { homedir } from 'node:os'
+import { join } from 'node:path'
 import * as vscode from 'vscode'
 import { OmpHost, type OmpSession } from './agent.ts'
 import { resolveOmp } from './binary.ts'
 import { OmpConfigCli } from './settings.ts'
-import { agentSteps, sessionStats } from './stats.ts'
+import { checkSessionFormat, installOmpExtensions } from './compat.ts'
+import { filesContext, gitDiffContext, openTabsContext, problemsContext, selectionContext, symbolContext } from './context.ts'
+import { agentSteps, folderKey, sessionStats } from './stats.ts'
 import { checkForUpdate } from './update.ts'
 import type { AgentModelChoice, AgentSetting, HostMessage, TabState, WebviewMessage } from './types.ts'
 
@@ -40,6 +43,14 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand('ohMyPi.settings', () => provider.showView('settings')),
     vscode.commands.registerCommand('ohMyPi.focus', () => provider.focusChat()),
     vscode.commands.registerCommand('ohMyPi.addSelection', () => provider.addSelection()),
+    // Send to OMP: each builds prompt text and drops it into the chat input (opening a chat if none).
+    vscode.commands.registerCommand('ohMyPi.send.selection', () => { const e = vscode.window.activeTextEditor; if (e) void provider.sendContext(selectionContext(e)) }),
+    vscode.commands.registerCommand('ohMyPi.send.problems', (uri?: vscode.Uri) => { const u = uri instanceof vscode.Uri ? uri : vscode.window.activeTextEditor?.document.uri; void provider.sendContext(u ? problemsContext(u) : undefined, 'No errors or warnings in this file.') }),
+    vscode.commands.registerCommand('ohMyPi.send.workspaceProblems', () => provider.sendContext(problemsContext(), 'No errors or warnings in the workspace.')),
+    vscode.commands.registerCommand('ohMyPi.send.gitDiff', async (uri?: vscode.Uri) => { const u = uri instanceof vscode.Uri ? uri : vscode.window.activeTextEditor?.document.uri; void provider.sendContext(u ? await gitDiffContext(u) : undefined, 'No uncommitted changes in this file (or it is not in a git repository).') }),
+    vscode.commands.registerCommand('ohMyPi.send.openTabs', () => provider.sendContext(openTabsContext(), 'No open files.')),
+    vscode.commands.registerCommand('ohMyPi.send.symbol', async () => { const e = vscode.window.activeTextEditor; void provider.sendContext(e ? await symbolContext(e) : undefined, 'No function or class at the cursor (or no language support for this file).') }),
+    vscode.commands.registerCommand('ohMyPi.send.files', (uri?: vscode.Uri, all?: vscode.Uri[]) => { const list = all?.length ? all : uri ? [uri] : []; void provider.sendContext(list.length ? filesContext(list) : undefined, 'Select files in the Explorer first.') }),
     vscode.commands.registerCommand('ohMyPi.checkForUpdates', () => checkForUpdate(context, output, true)),
     vscode.window.onDidChangeActiveTextEditor(() => provider.folderMaybeChanged()),
     vscode.workspace.onDidChangeConfiguration(e => { if (e.affectsConfiguration('ohMyPi.statusBarButton')) provider.updateStatusItem() }),
@@ -47,6 +58,20 @@ export function activate(context: vscode.ExtensionContext): void {
     { dispose: () => provider.dispose() },
   )
   provider.updateStatusItem()
+  // Bundled omp extensions (fork-from-here, subagent fix) and a check that omp's session files still parse.
+  void (async () => {
+    try {
+      const added = await installOmpExtensions(vscode.Uri.joinPath(context.extensionUri, 'omp-extensions').fsPath, String(context.extension.packageJSON.version))
+      if (added.length) output.appendLine(`installed omp extensions: ${added.join(', ')} (take effect when omp restarts)`)
+    } catch (error) { output.appendLine(`omp extensions: ${String(error)}`) }
+    const folder = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath
+    if (folder === undefined) return
+    const bad = await checkSessionFormat(join(homedir(), '.omp', 'agent', 'sessions', folderKey(folder))).catch(() => undefined)
+    if (bad) {
+      output.appendLine(`omp session format changed: ${bad}`)
+      void vscode.window.showWarningMessage(`OMP: omp's session files changed shape (${bad}). Usage and status numbers may be wrong until the extension is updated.`)
+    }
+  })()
   // Daily, a minute after startup so it never slows activation.
   const t = setTimeout(() => { void checkForUpdate(context, output) }, 60_000)
   context.subscriptions.push({ dispose: () => clearTimeout(t) })
@@ -260,6 +285,16 @@ class ChatViewProvider implements vscode.WebviewViewProvider {
     if (got === undefined) return
     t.stats = got
     this.postTab(id, { type: 'tab', tab: this.tabState(t.session) })
+  }
+
+  /** Put `text` into the active chat's input (opening a chat if none); `empty` explains when there is nothing to send. */
+  async sendContext(text: string | undefined, empty = 'Nothing to send.'): Promise<void> {
+    if (!text) { void vscode.window.showInformationMessage(`OMP: ${empty}`); return }
+    let t = this.tab(this.active) ?? this.tabs.at(-1)
+    if (t === undefined) { await this.newTab(); t = this.tab(this.active) }
+    if (t === undefined) return
+    t.panel.reveal(t.panel.viewColumn, false)
+    this.postTab(t.session.id, { type: 'insert', text: `${text}\n` })
   }
 
   /** Ctrl+Alt+P: show the last chat, or start one. */

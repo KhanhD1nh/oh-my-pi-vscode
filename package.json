@@ -2,7 +2,7 @@
   "name": "oh-my-pi",
   "displayName": "Oh My Pi",
   "description": "Chat with the omp coding agent inside VS Code: streaming replies, tool cards, diffs, model picker and every omp setting.",
-  "version": "0.23.0",
+  "version": "0.24.0",
   "publisher": "khanhd1nh",
   "license": "MIT",
   "repository": {
@@ -73,6 +73,48 @@
       {
         "command": "ohMyPi.checkForUpdates",
         "title": "OMP: Check for Updates"
+      },
+      {
+        "command": "ohMyPi.send.selection",
+        "title": "OMP: Send Selection or File",
+        "icon": "$(selection)",
+        "category": "OMP"
+      },
+      {
+        "command": "ohMyPi.send.problems",
+        "title": "OMP: Send Problems in File",
+        "icon": "$(warning)",
+        "category": "OMP"
+      },
+      {
+        "command": "ohMyPi.send.workspaceProblems",
+        "title": "OMP: Send Problems in Workspace",
+        "icon": "$(warning)",
+        "category": "OMP"
+      },
+      {
+        "command": "ohMyPi.send.gitDiff",
+        "title": "OMP: Send Uncommitted Changes of File",
+        "icon": "$(git-compare)",
+        "category": "OMP"
+      },
+      {
+        "command": "ohMyPi.send.openTabs",
+        "title": "OMP: Send Open Tabs",
+        "icon": "$(files)",
+        "category": "OMP"
+      },
+      {
+        "command": "ohMyPi.send.symbol",
+        "title": "OMP: Send Function/Class at Cursor",
+        "icon": "$(symbol-method)",
+        "category": "OMP"
+      },
+      {
+        "command": "ohMyPi.send.files",
+        "title": "OMP: Send to OMP",
+        "icon": "$(send)",
+        "category": "OMP"
       }
     ],
     "menus": {
@@ -90,9 +132,8 @@
       ],
       "editor/context": [
         {
-          "command": "ohMyPi.addSelection",
-          "when": "editorHasSelection",
-          "group": "ohMyPi"
+          "submenu": "ohMyPi.send",
+          "group": "ohMyPi@1"
         }
       ],
       "editor/title": [
@@ -116,6 +157,45 @@
           "when": "activeWebviewPanelId == 'ohMyPi.panel'",
           "group": "navigation@2"
         }
+      ],
+      "ohMyPi.send": [
+        {
+          "command": "ohMyPi.send.selection",
+          "group": "1_code@1"
+        },
+        {
+          "command": "ohMyPi.send.symbol",
+          "group": "1_code@2"
+        },
+        {
+          "command": "ohMyPi.send.problems",
+          "group": "2_info@1"
+        },
+        {
+          "command": "ohMyPi.send.gitDiff",
+          "group": "2_info@2"
+        },
+        {
+          "command": "ohMyPi.send.openTabs",
+          "group": "3_more@1"
+        },
+        {
+          "command": "ohMyPi.send.workspaceProblems",
+          "group": "3_more@2"
+        }
+      ],
+      "explorer/context": [
+        {
+          "command": "ohMyPi.send.files",
+          "when": "!explorerResourceIsFolder || explorerResourceIsFolder",
+          "group": "ohMyPi@1"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "ohMyPi.send.files",
+          "when": "false"
+        }
       ]
     },
     "keybindings": [
@@ -129,6 +209,18 @@
         "key": "ctrl+alt+k",
         "mac": "cmd+alt+k",
         "when": "editorHasSelection"
+      },
+      {
+        "command": "ohMyPi.send.selection",
+        "key": "ctrl+alt+o",
+        "mac": "cmd+alt+o",
+        "when": "editorTextFocus"
+      },
+      {
+        "command": "ohMyPi.send.problems",
+        "key": "ctrl+alt+d",
+        "mac": "cmd+alt+d",
+        "when": "editorTextFocus"
       }
     ],
     "configuration": {
@@ -172,7 +264,13 @@
           "description": "Goal mode: stop after spending this many USD on the goal (0 = no limit)."
         }
       }
-    }
+    },
+    "submenus": [
+      {
+        "id": "ohMyPi.send",
+        "label": "Send to OMP"
+      }
+    ]
   },
   "scripts": {
     "build": "node build.mjs",
