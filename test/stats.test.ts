@@ -1,7 +1,7 @@
 /** Session file fold: costs, prompts, lines changed; omp folder key. */
 import { strict as assert } from 'node:assert'
 import { test } from 'node:test'
-import { folderKey, foldSession, foldSteps } from '../src/stats.ts'
+import { Fold, folderKey, foldSession, foldSteps } from '../src/stats.ts'
 
 test('folderKey matches omp layout', () => {
   assert.equal(folderKey('D:\\code\\app'), '--D--code-app--')
@@ -34,4 +34,12 @@ test('foldSteps pairs tool calls with results', () => {
   const r = foldSteps(lines)
   assert.deepEqual(r.steps.map(s => [s.tool, s.label, s.status]), [['read', 'Read routes', 'done'], ['grep', 'Route', 'failed'], [undefined, 'Found 12 routes', 'done']])
   assert.equal(r.model, 'cx/luna')
+})
+
+test('Fold is incremental: feeding lines in two batches equals one pass', () => {
+  const a = JSON.stringify({ type: 'message', message: { role: 'assistant', usage: { input: 10, output: 2, cost: { total: 0.5 } } } })
+  const b = JSON.stringify({ type: 'message', message: { role: 'user', attribution: 'user' } })
+  const f = new Fold(); f.line(a); const mid = f.stats(); f.line(b); f.line(a)
+  assert.equal(mid.cost, 0.5)
+  assert.deepEqual(f.stats(), foldSession([a, b, a]))
 })

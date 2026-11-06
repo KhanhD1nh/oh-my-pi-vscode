@@ -82,9 +82,10 @@ class ChatViewProvider implements vscode.WebviewViewProvider {
     let host = this.hosts.get(cwd)
     if (host === undefined) {
       host = new OmpHost(this.command, () => cwd, {
-        item: (s, item) => { this.markUnread(s.id); this.postTab(s.id, { type: 'upsert', tab: s.id, item }) },
-        reset: s => { this.postTab(s.id, { type: 'reset', tab: s.id, items: s.transcript.items }) },
+        item: (s, item) => { this.markUnread(s.id); this.queueUpsert(s.id, item) },
+        reset: s => { this.pending.delete(s.id); this.postTab(s.id, { type: 'reset', tab: s.id, items: s.transcript.items }) },
         state: s => {
+          if (!s.busy) this.flushUpserts()
           this.postTab(s.id, { type: 'tab', tab: this.tabState(s) }); this.tickTitles()
           // Sidebar follows title changes (omp names a session after its first turn) and turn ends.
           if (!s.busy || s.title !== this.lastTitles.get(s.id)) { this.lastTitles.set(s.id, s.title); this.refreshSidebar() }
@@ -109,6 +110,22 @@ class ChatViewProvider implements vscode.WebviewViewProvider {
     const norm = (p: string) => p.replace(/\\/gu, '/').toLowerCase()
     const repo = git.exports.getAPI(1).repositories.filter(r => norm(cwd).startsWith(norm(r.rootUri.fsPath))).sort((a, b) => b.rootUri.fsPath.length - a.rootUri.fsPath.length)[0]
     return repo?.state.HEAD?.name
+  }
+
+  /** Streaming sends one update per token; send each changed item at most every 50 ms (latest copy wins). */
+  private pending = new Map<string, Map<string, import('./types.ts').ChatItem>>()
+  private flushTimer: ReturnType<typeof setTimeout> | undefined
+  private queueUpsert(tab: string, item: import('./types.ts').ChatItem): void {
+    let m = this.pending.get(tab)
+    if (m === undefined) { m = new Map(); this.pending.set(tab, m) }
+    m.set(item.id, item)
+    this.flushTimer ??= setTimeout(() => this.flushUpserts(), 50)
+  }
+  private flushUpserts(): void {
+    this.flushTimer = undefined
+    const all = this.pending
+    this.pending = new Map()
+    for (const [tab, items] of all) for (const item of items.values()) this.postTab(tab, { type: 'upsert', tab, item })
   }
 
   private tab(id: string | undefined) { return this.tabs.find(t => t.session.id === id) }

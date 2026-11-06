@@ -520,3 +520,6 @@ code { font-size: 0.88em; }
 .astep-tool { font-weight: 600; flex: none; }
 .astep-label { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 .astep-model { font-size: 0.8em; margin-top: 4px; }
+
+.earlier { align-self: center; margin: 4px 0 12px; padding: 4px 12px; border-radius: 12px; color: var(--muted); border: 1px solid var(--line); font-size: 0.85em; }
+.earlier:hover { color: var(--vscode-foreground); background: var(--soft); }

@@ -162,7 +162,7 @@ const S = {
   view: MODE === 'sidebar' ? 'history' : 'chat', tabs: [], active: undefined, models: [], cwd: '', transcripts: {},
   sessions: [], settings: { status: 'idle', settings: [], models: [], failed: {} },
   query: '', group: 'model', open: new Set(), images: [], menu: null, sessionQuery: '', modelQuery: '',
-  files: [], fileQuery: null, menuIndex: 0, drafts: {},
+  files: [], fileQuery: null, menuIndex: 0, drafts: {}, window: {},
 }
 const tab = () => S.tabs.find(t => t.id === S.active) ?? { busy: false, queued: 0, thinkingLevels: [], modes: [], commands: [], usage: {} }
 const items = () => S.transcripts[S.active] ?? []
@@ -264,7 +264,11 @@ function chatView() {
       h('div', { class: 'suggest' }, ['Explain this project structure', 'Find and fix a bug in the current file', 'Write tests for the selected code']
         .map(t => h('button', { onclick: () => { const ta = document.getElementById('input'); ta.value = t; ta.focus() } }, t)))))
   } else {
-    for (const it of list) { const n = itemNode(it); nodes.set(it.id, n); transcriptEl.append(n) }
+    const from = Math.max(0, list.length - (S.window[S.active] ?? 200))
+    if (from > 0) transcriptEl.append(h('button', { class: 'earlier', onclick: () => { S.window[S.active] = (S.window[S.active] ?? 200) + 200; const t = transcriptEl, h0 = t.scrollHeight; render(); transcriptEl.scrollTop = transcriptEl.scrollHeight - h0 } }, `Show ${Math.min(200, from)} earlier of ${from}`))
+    const frag = document.createDocumentFragment()
+    for (const it of list.slice(from)) { const n = itemNode(it); nodes.set(it.id, n); frag.append(n) }
+    transcriptEl.append(frag)
   }
   renderWorking()
   const wrap = h('div', { class: 'composer-wrap' }, composer(), statusLine())
