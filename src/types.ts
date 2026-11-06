@@ -38,7 +38,7 @@ export interface ToolCard {
 
 /** One transcript item. */
 export type ChatItem =
-  | { type: 'user'; id: string; text: string }
+  | { type: 'user'; id: string; text: string; images?: { mimeType: string; data: string }[] }
   | { type: 'assistant'; id: string; text: string }
   | { type: 'thought'; id: string; text: string }
   | { type: 'tool'; id: string; card: ToolCard }

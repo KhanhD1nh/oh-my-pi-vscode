@@ -338,3 +338,41 @@ svg.tab-ico.unread { color: #bd93f9; }
 .dot.on { background: var(--vscode-focusBorder); opacity: 1; }
 .dot.cur { width: 13px; height: 13px; background: var(--vscode-button-foreground); box-shadow: 0 0 0 3px var(--vscode-focusBorder); }
 .menu.modes { max-height: min(560px, 80vh); }
+
+/* ── motion: short, eased, only on real changes ── */
+body { --ease: cubic-bezier(.2, .8, .2, 1); }
+@keyframes pop { from { opacity: 0; transform: translateY(6px) scale(.98); } to { opacity: 1; transform: none; } }
+@keyframes rise { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: none; } }
+@keyframes drop { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
+@keyframes fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes swap { from { opacity: 0; transform: scale(.6) rotate(-45deg); } to { opacity: 1; transform: none; } }
+.menu.enter { animation: pop .16s var(--ease); transform-origin: bottom left; }
+.menu.modes.enter { transform-origin: bottom right; }
+.ua-menu { animation: pop .14s var(--ease); transform-origin: top right; }
+.transcript > .enter { animation: rise .24s var(--ease); }
+.expand { animation: drop .18s var(--ease); }
+.fade { animation: fade .18s var(--ease); }
+.working { animation: fade .3s var(--ease); }
+.send svg.swap { animation: swap .18s var(--ease); }
+button, .tabchip, .chip-btn, .menu-item, .tool-line, .ask-opt, .session, .cat, .tab-ico, .composer {
+  transition: background-color .15s var(--ease), color .15s var(--ease), border-color .15s var(--ease), box-shadow .15s var(--ease), opacity .15s var(--ease), transform .12s var(--ease);
+}
+.send:active, .chip-btn:active, .icon-btn:active, .ask-submit:active { transform: scale(.93); }
+/* hover-only controls fade instead of popping; hidden ones can't be clicked */
+.tab-x, .ua-btn { visibility: visible; opacity: 0; pointer-events: none; transition: opacity .15s var(--ease); }
+.tabchip:hover .tab-x, .tabchip.on .tab-x, .user-wrap:hover .ua-btn, .ua:has(.ua-menu) .ua-btn { opacity: 1; pointer-events: auto; }
+.user-wrap { transition: padding-bottom .15s var(--ease); }
+.dot { transition: background-color .15s var(--ease), transform .15s var(--ease); }
+.dot:hover { transform: scale(1.3); }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .001ms !important; animation-iteration-count: 1 !important; transition-duration: .001ms !important; }
+}
+
+/* images: thumbnails in composer and on sent messages, full-size viewer */
+img.thumb { cursor: zoom-in; }
+.attach img.thumb { width: 52px; height: 52px; background: var(--vscode-textCodeBlock-background); }
+.user-imgs { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; margin-bottom: 6px; max-width: 88%; }
+.user-imgs img { width: 72px; height: 72px; object-fit: cover; border-radius: var(--radius-sm); border: 1px solid var(--line); display: block; background: var(--vscode-textCodeBlock-background); }
+.lightbox { position: fixed; inset: 0; z-index: 100; background: rgba(0,0,0,.75); display: grid; place-items: center; padding: 16px; cursor: zoom-out; animation: fade .15s var(--ease); }
+.lightbox.out { opacity: 0; transition: opacity .15s var(--ease); }
+.lightbox img { max-width: 100%; max-height: 100%; object-fit: contain; border-radius: var(--radius-sm); box-shadow: 0 12px 40px rgba(0,0,0,.5); animation: pop .18s var(--ease); }

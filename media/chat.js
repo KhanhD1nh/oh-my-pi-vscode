@@ -115,9 +115,16 @@ const items = () => S.transcripts[S.active] ?? []
 // ───────────── chat items (incremental) ─────────────
 let transcriptEl = null
 const nodes = new Map()
-function toggle(key) { S.open.has(key) ? S.open.delete(key) : S.open.add(key); const it = items().find(x => x.id === key); if (it) upsertNode(it) }
+function toggle(key) {
+  S.open.has(key) ? S.open.delete(key) : S.open.add(key)
+  const it = items().find(x => x.id === key); if (!it) return
+  upsertNode(it)
+  if (!S.open.has(key)) return
+  const n = nodes.get(key)
+  ;(n?.querySelector('.thought-body') ?? n?.querySelector('.tool')?.children[1])?.classList.add('expand')
+}
 function itemNode(it) {
-  if (it.type === 'user') return h('div', { class: 'user-wrap' }, h('div', { class: 'msg user', html: md(it.text) }), userActions(it))
+  if (it.type === 'user') return h('div', { class: 'user-wrap' }, it.images?.length ? h('div', { class: 'user-imgs' }, it.images.map(i => thumb(`data:${i.mimeType};base64,${i.data}`))) : null, it.text ? h('div', { class: 'msg user', html: md(it.text) }) : null, userActions(it))
   const state = it.type === 'tool' ? it.card.status : it.type === 'error' ? 'failed' : 'text'
   return h('div', { class: `step ${state}` }, itemBody(it))
 }
@@ -140,7 +147,7 @@ function upsertNode(it) {
   transcriptEl.querySelector('.empty')?.remove()
   const fresh = itemNode(it)
   const old = nodes.get(it.id)
-  if (old) old.replaceWith(fresh); else transcriptEl.insertBefore(fresh, transcriptEl.querySelector('.working'))
+  if (old) old.replaceWith(fresh); else { fresh.classList.add('enter'); transcriptEl.insertBefore(fresh, transcriptEl.querySelector('.working')) }
   nodes.set(it.id, fresh)
 }
 function stickBottom(fn) {
@@ -171,9 +178,9 @@ function tabbar() {
 function backbar(title) {
   return h('div', { class: 'topbar' }, h('button', { class: 'back', onclick: () => go('chat') }, svg(ICON.back), 'Back'), h('div', { class: 'title' }, title))
 }
-function activate(id) { if (id === S.active) return; saveDraft(); S.active = id; S.menu = null; send({ type: 'activate', tab: id }); render() }
+function activate(id) { if (id === S.active) return; saveDraft(); S.active = id; S.menu = null; S.fade = true; send({ type: 'activate', tab: id }); render() }
 function go(view) {
-  S.view = view; S.menu = null
+  S.view = view; S.menu = null; S.fade = true
   if (view === 'history') send({ type: 'listSessions' })
   if (view === 'settings' && !S.settings.settings.length) send({ type: 'loadSettings' })
   render()
@@ -240,9 +247,11 @@ function insertAtEnd(ch) { const x = document.getElementById('input'); x.value +
 function syncAction() {
   const b = document.getElementById('action'); const x = document.getElementById('input'); if (!b || !x) return
   const t = tab(); const stop = t.busy && !x.value.trim() && !S.images.length
+  const state = stop ? 'stop' : 'send'; const flip = b.dataset.state && b.dataset.state !== state; b.dataset.state = state
   b.className = `send${stop ? ' stop' : ''}`
   b.title = stop ? 'Stop (Esc)' : t.busy ? 'Queue message (Enter)' : 'Send (Enter)'
-  b.replaceChildren(svg(stop ? ICON.stop : ICON.up))
+  if (!flip && b.firstChild) return
+  const icon = svg(stop ? ICON.stop : ICON.up); if (flip) icon.classList.add('swap'); b.replaceChildren(icon)
 }
 
 function composer() {
@@ -267,7 +276,7 @@ function composer() {
   const ap = APPROVAL.find(x => x.id === S.approval)
   const pct = t.usage?.size ? Math.round((t.usage.used ?? 0) / t.usage.size * 100) : null
   const box = h('div', { class: 'composer', id: 'composer' },
-    S.images.length ? h('div', { class: 'attachments' }, S.images.map((img, i) => h('span', { class: 'attach' }, h('img', { src: img.url }), h('button', { onclick: () => { S.images.splice(i, 1); refreshComposer() } }, '×')))) : null,
+    S.images.length ? h('div', { class: 'attachments' }, S.images.map((img, i) => h('span', { class: 'attach' }, thumb(img.url), h('button', { onclick: () => { S.images.splice(i, 1); refreshComposer() } }, '×')))) : null,
     ta,
     h('div', { class: 'composer-bar' },
       h('button', { class: `chip-btn icon${S.menu === 'add' ? ' open' : ''}`, title: 'Add', onclick: () => openMenu('add') }, svg(ICON.plus)),
@@ -278,6 +287,9 @@ function composer() {
       h('button', { class: `chip-btn${S.menu === 'mode' ? ' open' : ''}${plan ? ' plan' : ''}`, title: 'Mode (Shift+Tab)', onclick: () => openMenu('mode') }, svg(plan ? MI.plan : ap?.icon ?? MI.bolt), h('span', { class: 'label' }, plan ? 'Plan' : ap?.name ?? 'Mode')),
       h('button', { id: 'action', class: 'send', onclick: () => { const x = document.getElementById('input'); if (tab().busy && !x.value.trim() && !S.images.length) send({ type: 'cancel', tab: S.active }); else submit() } }, svg(ICON.up))),
     menuEl())
+  const menu = box.querySelector('.menu')
+  if (menu && S.menuEnter) menu.classList.add('enter')
+  S.menuEnter = false
   queueMicrotask(() => { autosize(ta); syncAction() })
   return box
 }
@@ -291,7 +303,7 @@ function refreshComposer() {
 }
 
 // menus: model, thinking, /commands, @files
-function openMenu(kind) { S.menu = S.menu === kind ? null : kind; refreshComposer(); if (S.menu === 'model') setTimeout(() => document.getElementById('model-filter')?.focus(), 0) }
+function openMenu(kind) { S.menu = S.menu === kind ? null : kind; S.menuEnter = true; refreshComposer(); if (S.menu === 'model') setTimeout(() => document.getElementById('model-filter')?.focus(), 0) }
 function closeMenu() { S.menu = null; S.fileQuery = null; refreshComposer() }
 function menuEl() {
   const t = tab()
@@ -345,7 +357,7 @@ let fileTimer = null
 function updateInlineMenus(ta) {
   const mention = mentionAt(ta)
   if (mention !== null) {
-    if (S.menu !== 'files') { S.menu = 'files'; S.files = []; S.menuIndex = 0 }
+    if (S.menu !== 'files') { S.menu = 'files'; S.files = []; S.menuIndex = 0; S.menuEnter = true }
     if (mention !== S.fileQuery) {
       S.fileQuery = mention
       clearTimeout(fileTimer); fileTimer = setTimeout(() => send({ type: 'findFiles', query: mention }), 120)
@@ -353,7 +365,7 @@ function updateInlineMenus(ta) {
     refreshComposer(); return
   }
   const wantSlash = /^\/\S*$/.test(ta.value) && tab().commands.length
-  if (wantSlash) { S.menu = 'slash'; S.menuIndex = 0; refreshComposer(); return }
+  if (wantSlash) { if (S.menu !== 'slash') S.menuEnter = true; S.menu = 'slash'; S.menuIndex = 0; refreshComposer(); return }
   if (S.menu === 'slash' || S.menu === 'files') { S.menu = null; S.fileQuery = null; refreshComposer() }
 }
 function menuKey(e) {
@@ -516,6 +528,7 @@ function render() {
   transcriptEl = null; settingsList = null
   const parts = S.view === 'chat' ? chatView() : S.view === 'history' ? historyView() : settingsView()
   app.append(...[parts].flat())
+  if (S.fade) { app.children[1]?.classList.add('fade'); S.fade = false }
   const ta = document.getElementById('input')
   if (ta && S.active) { ta.value = S.drafts[S.active] ?? ''; autosize(ta) }
 }
@@ -548,7 +561,12 @@ window.addEventListener('message', ({ data: m }) => {
       if (m.tab.id === S.active) { refreshComposer(); if (was.busy !== m.tab.busy || was.queued !== m.tab.queued) stickBottom(renderWorking) }
       return
     }
-    case 'reset': S.transcripts[m.tab] = m.items; if (m.tab === S.active && S.view === 'chat') { S.open.clear(); render() } return
+    case 'reset': {
+      const same = JSON.stringify(S.transcripts[m.tab] ?? null) === JSON.stringify(m.items)
+      S.transcripts[m.tab] = m.items
+      if (!same && m.tab === S.active && S.view === 'chat') { S.open.clear(); render() }
+      return
+    }
     case 'upsert': {
       const list = (S.transcripts[m.tab] ??= [])
       const i = list.findIndex(x => x.id === m.item.id)
@@ -639,4 +657,14 @@ function askEl(it) {
   queueMicrotask(check)
   return h('div', { class: 'ask' }, h('div', { class: 'ask-msg', html: md(it.message) }), fields,
     h('div', { class: 'ask-actions' }, h('button', { class: 'ask-skip', onclick: () => send({ type: 'answer', tab: S.active, itemId: it.id, action: 'decline' }) }, 'Skip'), submit))
+}
+
+/** Image thumbnail; click opens it full size. */
+function thumb(src) { return h('img', { src, class: 'thumb', title: 'Click to view', onclick: () => lightbox(src) }) }
+function lightbox(src) {
+  const close = () => { box.classList.add('out'); setTimeout(() => box.remove(), 150); document.removeEventListener('keydown', onKey) }
+  const onKey = e => { if (e.key === 'Escape') close() }
+  const box = h('div', { class: 'lightbox', onclick: close }, h('img', { src }))
+  document.addEventListener('keydown', onKey)
+  document.body.append(box)
 }

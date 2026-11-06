@@ -52,8 +52,8 @@ export class Transcript {
   private nextId(): string { this.seq += 1; return `i${this.seq}` }
 
   /** Append the user's prompt. */
-  user(text: string): ChatItem {
-    const item: ChatItem = { type: 'user', id: this.nextId(), text }
+  user(text: string, images: { mimeType: string; data: string }[] = []): ChatItem {
+    const item: ChatItem = { type: 'user', id: this.nextId(), text, ...images.length ? { images } : {} }
     this.items.push(item)
     return item
   }

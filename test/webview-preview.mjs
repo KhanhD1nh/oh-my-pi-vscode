@@ -13,7 +13,7 @@ const models = [
   { selector: 'openai/gpt-6', provider: 'openai', id: 'gpt-6', name: 'GPT-6', reasoning: true },
 ]
 const items = [
-  { type: 'user', id: 'i1', text: 'Fix the date parsing bug in `src/lib/date.ts` and add a test.' },
+  { type: 'user', id: 'i1', images: [{ mimeType: 'image/png', data: 'iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAFklEQVR4nGP4z8DAwMDAxMDAwMDAAAANHQEDasKb6QAAAABJRU5ErkJggg==' }], text: 'Fix the date parsing bug in `src/lib/date.ts` and add a test.' },
   { type: 'thought', id: 'i2', text: 'Need to read the file first.' },
   { type: 'tool', id: 't-1', card: { id: '1', kind: 'read', name: 'read', title: 'Reading date helper', status: 'completed', path: 'D:/WorkSpace/XE-VN/src/lib/date.ts', output: '1: export function parse(s) {' } },
   { type: 'tool', id: 't-2', card: { id: '2', kind: 'edit', name: 'edit', title: 'Editing date helper', status: 'completed', path: 'D:/WorkSpace/XE-VN/src/lib/date.ts', diff: { path: 'D:/WorkSpace/XE-VN/src/lib/date.ts', oldText: 'export function parse(s) {\n  return new Date(s)\n}', newText: "export function parse(s) {\n  const [d, m, y] = s.split('/')\n  return new Date(+y, +m - 1, +d)\n}" } } },
@@ -51,6 +51,7 @@ const tabs = [
 await post({ type: 'tabs', tabs, active: 'A', models, cwd: 'D:/WorkSpace/XE-VN' })
 await post({ type: 'reset', tab: 'A', items })
 await post({ type: 'approval', value: 'yolo' })
+await page.click('.user-imgs img'); await page.waitForTimeout(250); await page.screenshot({ path: `${out}/vsc-lightbox.png` }); console.log('lightbox open:', await page.locator('.lightbox').count()); await page.keyboard.press('Escape'); await page.waitForTimeout(250); console.log('lightbox after esc:', await page.locator('.lightbox').count())
 await page.screenshot({ path: `${out}/vsc-bar-stop.png`, clip: { x: 0, y: 760, width: 440, height: 100 } })
 await page.fill('#input', 'also update docs'); await page.dispatchEvent('#input', 'input'); await page.screenshot({ path: `${out}/vsc-bar-send.png`, clip: { x: 0, y: 760, width: 440, height: 100 } }); await page.fill('#input', ''); await page.dispatchEvent('#input', 'input')
 await page.click('.chip-btn[title^="Mode ("]'); await page.waitForTimeout(100); await page.screenshot({ path: `${out}/vsc-mode.png`, clip: { x: 0, y: 300, width: 440, height: 560 } }); await page.click('.chip-btn[title^="Mode ("]')

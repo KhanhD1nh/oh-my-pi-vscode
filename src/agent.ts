@@ -105,7 +105,7 @@ export class OmpSession {
     while (this.queue.length > 0 && !this.busy) {
       const next = this.queue.shift()!
       this.title ??= next.text.split('\n')[0]!.slice(0, 60)
-      this.events.item(this, this.transcript.user(next.text))
+      this.events.item(this, this.transcript.user(next.text, next.images))
       this.busy = true
       this.events.state(this)
       try {
