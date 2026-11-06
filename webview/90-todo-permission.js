@@ -51,3 +51,18 @@ document.addEventListener('keydown', e => {
   else if (e.key === 'Escape') { e.preventDefault(); send({ type: 'permit', tab: S.active, itemId: open.id }) }
 })
 
+
+// ───────────── goal ─────────────
+/** Goal bar above the input: objective, turn count, state and controls. */
+function goalBar() {
+  const g = tab().goal; if (!g) return null
+  const label = { active: 'Working', paused: 'Paused', done: 'Done', stopped: 'Stopped', limit: 'Limit reached' }[g.status]
+  const btn = (text, action, cls = '') => h('button', { class: `goal-btn ${cls}`, onclick: () => send({ type: 'goal', tab: S.active, action }) }, text)
+  return h('div', { class: `goalbar ${g.status}`, id: 'goalbar' },
+    h('span', { class: 'goal-ico' }, g.status === 'active' && tab().busy ? h('span', { class: 'tab-spin' }, SPIN[spinAt]) : g.status === 'done' ? '✓' : '🎯'),
+    h('span', { class: 'goal-text', title: g.objective }, g.objective),
+    h('span', { class: 'goal-meta' }, `${label} · turn ${g.turns}/${g.maxTurns}${g.reason ? ` · ${g.reason}` : ''}`),
+    g.status === 'active' ? btn('Pause', 'pause') : g.status === 'done' || g.status === 'stopped' ? null : btn(g.status === 'limit' ? 'More turns' : 'Resume', 'resume', 'primary'),
+    g.status === 'done' || g.status === 'stopped' ? btn('Dismiss', 'stop', 'muted') : btn('Stop', 'stop', 'muted'))
+}
+function refreshGoal() { const el = document.getElementById('goalbar'); const fresh = goalBar(); if (el) { if (fresh) el.replaceWith(fresh); else el.remove() } else if (fresh) document.querySelector('.composer-wrap')?.prepend(fresh) }

@@ -153,7 +153,7 @@ class ChatViewProvider implements vscode.WebviewViewProvider {
   private tabState(s: OmpSession): TabState {
     const t = this.tab(s.id)
     return {
-      id: s.id, busy: s.busy, queued: s.queue.length, thinkingLevels: s.thinkingLevels, modes: s.modes, commands: s.commands, usage: s.usage,
+      id: s.id, busy: s.busy, queued: s.queue.filter(q => !q.goal).length, ...s.goal ? { goal: s.goal } : {}, thinkingLevels: s.thinkingLevels, modes: s.modes, commands: s.commands, usage: s.usage,
       ...s.title ? { title: s.title } : {}, ...s.model ? { model: s.model } : {}, ...s.thinking ? { thinking: s.thinking } : {}, ...s.mode ? { mode: s.mode } : {},
       ...t?.unread ? { unread: true } : {},
       ...t ? { folder: t.cwd.replace(/\\/gu, '/').split('/').filter(Boolean).pop() ?? t.cwd, startedAt: t.startedAt } : {},
@@ -362,6 +362,11 @@ class ChatViewProvider implements vscode.WebviewViewProvider {
             const row = rows.find(r => r.sessionId === m.sessionId) ?? { sessionId: m.sessionId, cwd }
             this.openPanel(await this.host(cwd).open(row), cwd)
           } else this.activate(m.sessionId)
+          return
+        }
+        case 'goal': {
+          const cfg = vscode.workspace.getConfiguration('ohMyPi')
+          this.tab(m.tab)?.session.setGoal(m.action, { ...m.objective !== undefined ? { objective: m.objective } : {}, maxTurns: m.maxTurns ?? cfg.get<number>('goal.maxTurns', 20), maxCost: m.maxCost ?? cfg.get<number>('goal.maxCost', 0) })
           return
         }
         case 'editFrom': {

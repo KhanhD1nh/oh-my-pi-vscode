@@ -596,3 +596,16 @@ mark.hit.cur { background: #f1fa8c; color: #1f2024; }
 .msg.user .ua-btn { width: 22px; height: 22px; border-radius: 50%; background: var(--vscode-editorWidget-background, var(--vscode-input-background)); border: 1px solid var(--line); box-shadow: 0 2px 6px rgba(0,0,0,.3); }
 .msg.user .ua-btn svg { width: 12px; height: 12px; }
 .msg.user .ua-menu { top: 26px; }
+
+/* goal bar */
+.goalbar { display: flex; align-items: center; gap: 8px; padding: 6px 10px; margin-bottom: 6px; border-radius: var(--radius); border: 1px solid color-mix(in srgb, #bd93f9 45%, var(--line)); background: color-mix(in srgb, #bd93f9 8%, var(--vscode-input-background)); font-size: 0.9em; animation: rise .2s var(--ease); }
+.goalbar.done { border-color: color-mix(in srgb, var(--vscode-testing-iconPassed, #3fb950) 50%, var(--line)); background: color-mix(in srgb, var(--vscode-testing-iconPassed, #3fb950) 8%, var(--vscode-input-background)); }
+.goalbar.paused, .goalbar.limit { border-color: color-mix(in srgb, #f1fa8c 45%, var(--line)); }
+.goalbar.stopped { opacity: .75; }
+.goal-ico { flex: none; width: 16px; text-align: center; color: #bd93f9; }
+.goal-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }
+.goal-meta { flex: none; color: var(--muted); font-size: 0.9em; max-width: 45%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.goal-btn { flex: none; padding: 2px 9px; border-radius: var(--radius-sm); border: 1px solid var(--line); font-size: 0.88em; }
+.goal-btn:hover { background: var(--soft); }
+.goal-btn.primary { background: var(--vscode-button-background); color: var(--vscode-button-foreground); border-color: transparent; }
+.goal-btn.muted { color: var(--muted); }

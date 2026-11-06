@@ -42,7 +42,7 @@ function chatView() {
     transcriptEl.append(frag)
   }
   renderWorking()
-  const wrap = h('div', { class: 'composer-wrap' }, todoBar(), composer(), statusLine())
+  const wrap = h('div', { class: 'composer-wrap' }, goalBar(), todoBar(), composer(), statusLine())
   queueMicrotask(() => { transcriptEl.scrollTop = transcriptEl.scrollHeight })
   return MODE === 'sidebar' ? [tabbar(), transcriptEl, wrap] : [transcriptEl, wrap]
 }
@@ -236,7 +236,8 @@ function menuEl() {
   }
   return null
 }
-function slashHits() { const ta = document.getElementById('input'); const m = ta && /^\/(\S*)$/.exec(ta.value); if (!m) return []; const q = m[1].toLowerCase(); const all = tab().commands; return [...all.filter(c => c.name.toLowerCase().startsWith(q)), ...all.filter(c => !c.name.toLowerCase().startsWith(q) && (c.name.toLowerCase().includes(q) || (c.description ?? '').toLowerCase().includes(q)))] }
+const GOAL_CMD = { name: 'goal', description: 'Work on an objective across turns until done (pause / resume / stop)' }
+function slashHits() { const ta = document.getElementById('input'); const m = ta && /^\/(\S*)$/.exec(ta.value); if (!m) return []; const q = m[1].toLowerCase(); const all = [GOAL_CMD, ...tab().commands.filter(c => c.name !== 'goal')]; return [...all.filter(c => c.name.toLowerCase().startsWith(q)), ...all.filter(c => !c.name.toLowerCase().startsWith(q) && (c.name.toLowerCase().includes(q) || (c.description ?? '').toLowerCase().includes(q)))] }
 /** `@query` right before the caret, or null. */
 function mentionAt(ta) { const before = ta.value.slice(0, ta.selectionStart); const m = /(^|\s)@([^\s@]*)$/.exec(before); return m ? m[2] : null }
 let fileTimer = null
@@ -250,7 +251,7 @@ function updateInlineMenus(ta) {
     }
     refreshComposer(); return
   }
-  const wantSlash = /^\/\S*$/.test(ta.value) && tab().commands.length
+  const wantSlash = /^\/\S*$/.test(ta.value)
   if (wantSlash) { if (S.menu !== 'slash') S.menuEnter = true; S.menu = 'slash'; S.menuIndex = 0; refreshComposer(); return }
   if (S.menu === 'slash' || S.menu === 'files') { S.menu = null; S.fileQuery = null; refreshComposer() }
 }
@@ -278,6 +279,15 @@ function submit() {
   const ta = document.getElementById('input')
   const text = ta.value.trim()
   if ((!text && !S.images.length) || !S.active) return
+  // /goal <objective> | /goal pause | resume | stop — handled by the extension (omp's goal does not run over ACP).
+  const gm = /^\/goal(?:\s+([\s\S]*))?$/u.exec(text)
+  if (gm) {
+    const arg = (gm[1] ?? '').trim(), word = arg.toLowerCase()
+    if (['pause', 'resume', 'stop', 'clear', 'drop'].includes(word)) send({ type: 'goal', tab: S.active, action: word === 'clear' || word === 'drop' ? 'stop' : word })
+    else if (arg) send({ type: 'goal', tab: S.active, action: 'start', objective: arg })
+    else { ta.value = '/goal '; ta.focus(); return }
+    ta.value = ''; S.drafts[S.active] = ''; refreshComposer(); return
+  }
   send({ type: 'prompt', tab: S.active, text, images: S.images.map(({ mimeType, data }) => ({ mimeType, data })) })
   ta.value = ''; S.images = []; S.menu = null; S.drafts[S.active] = ''; S.histAt = undefined
   refreshComposer()

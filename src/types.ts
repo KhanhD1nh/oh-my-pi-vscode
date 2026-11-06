@@ -104,6 +104,8 @@ export interface TabState {
   unread?: boolean
   /** Totals for this session read from omp's session file. */
   stats?: SessionStats
+  /** Goal driven by the extension (omp's own goal mode does not continue over ACP). */
+  goal?: import('./goal.ts').Goal
   /** Workspace folder name, git branch and tab open time (ms) for the status line. */
   folder?: string
   branch?: string
@@ -145,6 +147,7 @@ export type WebviewMessage =
   | { type: 'findFiles'; query: string }
   | { type: 'fork'; tab: string }
   | { type: 'editFrom'; tab: string; itemId: string; rewindCode?: boolean }
+  | { type: 'goal'; tab: string; action: 'start' | 'pause' | 'resume' | 'stop'; objective?: string; maxTurns?: number; maxCost?: number }
   | { type: 'setApproval'; value: string }
   | { type: 'agentSteps'; tab: string; toolId: string; name: string }
   | { type: 'addSelection' }

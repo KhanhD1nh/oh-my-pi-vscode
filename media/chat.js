@@ -314,7 +314,7 @@ function chatView() {
     transcriptEl.append(frag)
   }
   renderWorking()
-  const wrap = h('div', { class: 'composer-wrap' }, todoBar(), composer(), statusLine())
+  const wrap = h('div', { class: 'composer-wrap' }, goalBar(), todoBar(), composer(), statusLine())
   queueMicrotask(() => { transcriptEl.scrollTop = transcriptEl.scrollHeight })
   return MODE === 'sidebar' ? [tabbar(), transcriptEl, wrap] : [transcriptEl, wrap]
 }
@@ -508,7 +508,8 @@ function menuEl() {
   }
   return null
 }
-function slashHits() { const ta = document.getElementById('input'); const m = ta && /^\/(\S*)$/.exec(ta.value); if (!m) return []; const q = m[1].toLowerCase(); const all = tab().commands; return [...all.filter(c => c.name.toLowerCase().startsWith(q)), ...all.filter(c => !c.name.toLowerCase().startsWith(q) && (c.name.toLowerCase().includes(q) || (c.description ?? '').toLowerCase().includes(q)))] }
+const GOAL_CMD = { name: 'goal', description: 'Work on an objective across turns until done (pause / resume / stop)' }
+function slashHits() { const ta = document.getElementById('input'); const m = ta && /^\/(\S*)$/.exec(ta.value); if (!m) return []; const q = m[1].toLowerCase(); const all = [GOAL_CMD, ...tab().commands.filter(c => c.name !== 'goal')]; return [...all.filter(c => c.name.toLowerCase().startsWith(q)), ...all.filter(c => !c.name.toLowerCase().startsWith(q) && (c.name.toLowerCase().includes(q) || (c.description ?? '').toLowerCase().includes(q)))] }
 /** `@query` right before the caret, or null. */
 function mentionAt(ta) { const before = ta.value.slice(0, ta.selectionStart); const m = /(^|\s)@([^\s@]*)$/.exec(before); return m ? m[2] : null }
 let fileTimer = null
@@ -522,7 +523,7 @@ function updateInlineMenus(ta) {
     }
     refreshComposer(); return
   }
-  const wantSlash = /^\/\S*$/.test(ta.value) && tab().commands.length
+  const wantSlash = /^\/\S*$/.test(ta.value)
   if (wantSlash) { if (S.menu !== 'slash') S.menuEnter = true; S.menu = 'slash'; S.menuIndex = 0; refreshComposer(); return }
   if (S.menu === 'slash' || S.menu === 'files') { S.menu = null; S.fileQuery = null; refreshComposer() }
 }
@@ -550,6 +551,15 @@ function submit() {
   const ta = document.getElementById('input')
   const text = ta.value.trim()
   if ((!text && !S.images.length) || !S.active) return
+  // /goal <objective> | /goal pause | resume | stop — handled by the extension (omp's goal does not run over ACP).
+  const gm = /^\/goal(?:\s+([\s\S]*))?$/u.exec(text)
+  if (gm) {
+    const arg = (gm[1] ?? '').trim(), word = arg.toLowerCase()
+    if (['pause', 'resume', 'stop', 'clear', 'drop'].includes(word)) send({ type: 'goal', tab: S.active, action: word === 'clear' || word === 'drop' ? 'stop' : word })
+    else if (arg) send({ type: 'goal', tab: S.active, action: 'start', objective: arg })
+    else { ta.value = '/goal '; ta.focus(); return }
+    ta.value = ''; S.drafts[S.active] = ''; refreshComposer(); return
+  }
   send({ type: 'prompt', tab: S.active, text, images: S.images.map(({ mimeType, data }) => ({ mimeType, data })) })
   ta.value = ''; S.images = []; S.menu = null; S.drafts[S.active] = ''; S.histAt = undefined
   refreshComposer()
@@ -764,7 +774,7 @@ window.addEventListener('message', ({ data: m }) => {
       const was = S.tabs[i]
       S.tabs[i] = m.tab
       if (m.tab.busy && !was.busy) { const st = (STAT[m.tab.id] ??= { chars: 0, total: 0, t0: 0, last: 0 }); st.chars = 0; st.t0 = 0 }
-      if (m.tab.id === S.active) refreshStatus()
+      if (m.tab.id === S.active) { refreshStatus(); refreshGoal() }
       if (S.view !== 'chat') return
       // Tab strip (spinner / unread / title) always; composer and spinner only for the active tab.
       const strip = document.querySelector('.tabbar')
@@ -1057,6 +1067,21 @@ document.addEventListener('keydown', e => {
   else if (e.key === 'Escape') { e.preventDefault(); send({ type: 'permit', tab: S.active, itemId: open.id }) }
 })
 
+
+// ───────────── goal ─────────────
+/** Goal bar above the input: objective, turn count, state and controls. */
+function goalBar() {
+  const g = tab().goal; if (!g) return null
+  const label = { active: 'Working', paused: 'Paused', done: 'Done', stopped: 'Stopped', limit: 'Limit reached' }[g.status]
+  const btn = (text, action, cls = '') => h('button', { class: `goal-btn ${cls}`, onclick: () => send({ type: 'goal', tab: S.active, action }) }, text)
+  return h('div', { class: `goalbar ${g.status}`, id: 'goalbar' },
+    h('span', { class: 'goal-ico' }, g.status === 'active' && tab().busy ? h('span', { class: 'tab-spin' }, SPIN[spinAt]) : g.status === 'done' ? '✓' : '🎯'),
+    h('span', { class: 'goal-text', title: g.objective }, g.objective),
+    h('span', { class: 'goal-meta' }, `${label} · turn ${g.turns}/${g.maxTurns}${g.reason ? ` · ${g.reason}` : ''}`),
+    g.status === 'active' ? btn('Pause', 'pause') : g.status === 'done' || g.status === 'stopped' ? null : btn(g.status === 'limit' ? 'More turns' : 'Resume', 'resume', 'primary'),
+    g.status === 'done' || g.status === 'stopped' ? btn('Dismiss', 'stop', 'muted') : btn('Stop', 'stop', 'muted'))
+}
+function refreshGoal() { const el = document.getElementById('goalbar'); const fresh = goalBar(); if (el) { if (fresh) el.replaceWith(fresh); else el.remove() } else if (fresh) document.querySelector('.composer-wrap')?.prepend(fresh) }
 
 // Drag & drop, find in chat, Markdown export.
 // ───────────── drag & drop ─────────────

@@ -2,7 +2,7 @@
   "name": "oh-my-pi",
   "displayName": "Oh My Pi",
   "description": "Chat with the omp coding agent inside VS Code: streaming replies, tool cards, diffs, model picker and every omp setting.",
-  "version": "0.22.0",
+  "version": "0.23.0",
   "publisher": "khanhd1nh",
   "license": "MIT",
   "repository": {
@@ -158,6 +158,18 @@
           "type": "boolean",
           "default": true,
           "description": "Show an OMP button in the status bar (shows running chats)."
+        },
+        "ohMyPi.goal.maxTurns": {
+          "type": "number",
+          "default": 20,
+          "minimum": 1,
+          "description": "Goal mode: stop after this many turns (resume adds more)."
+        },
+        "ohMyPi.goal.maxCost": {
+          "type": "number",
+          "default": 0,
+          "minimum": 0,
+          "description": "Goal mode: stop after spending this many USD on the goal (0 = no limit)."
         }
       }
     }

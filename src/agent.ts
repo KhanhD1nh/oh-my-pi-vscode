@@ -8,6 +8,7 @@ import { Readable as NodeReadable, Writable as NodeWritable } from 'node:stream'
 import { client as createAcpClientApp, methods, ndJsonStream, PROTOCOL_VERSION } from '@agentclientprotocol/sdk'
 import { ompEnv } from './binary.ts'
 import { Transcript } from './transcript.ts'
+import { type Goal, next as goalNext, startPrompt } from './goal.ts'
 import type { AskSchema, AskValue, ChatItem, SessionRow } from './types.ts'
 
 type Rpc = { request: (method: string, params: unknown) => Promise<any>; notify: (method: string, params: unknown) => Promise<void> }
@@ -47,7 +48,10 @@ export class OmpSession {
   title: string | undefined
   usage: { used?: number; size?: number; cost?: number } = {}
   /** Prompts sent while a turn was running; omp gets them one at a time, in order. */
-  queue: { text: string; images: { mimeType: string; data: string }[]; shown?: boolean }[] = []
+  queue: { text: string; images: { mimeType: string; data: string }[]; shown?: boolean; goal?: boolean }[] = []
+  /** Active goal, driven by the extension between turns. */
+  goal: Goal | undefined
+  private cancelled = false
 
   constructor(private readonly host: OmpHost, readonly id: string, private readonly events: SessionEvents) {}
 
@@ -126,7 +130,9 @@ export class OmpSession {
     while (this.queue.length > 0 && !this.busy) {
       const next = this.queue.shift()!
       this.title ??= next.text.split('\n')[0]!.slice(0, 60)
-      if (!next.shown) this.events.item(this, this.transcript.user(next.text, next.images))
+      // Continuation prompts are bookkeeping, not something you typed: keep them out of the chat.
+      if (!next.shown && !next.goal) this.events.item(this, this.transcript.user(next.text, next.images))
+      this.cancelled = false
       this.busy = true
       this.events.state(this)
       try {
@@ -140,7 +146,41 @@ export class OmpSession {
         this.events.state(this)
       }
       if (!this.named && this.queue.length === 0) void this.nameSession()
+      if (this.goal?.status === 'active' && this.queue.length === 0) this.continueGoal()
     }
+  }
+
+  /** After a turn: decide from the last reply whether the goal goes on, then queue the next prompt. */
+  private continueGoal(): void {
+    if (this.goal === undefined) return
+    const items = this.transcript.items
+    let i = items.length - 1; while (i >= 0 && items[i]!.type !== 'assistant') i--
+    const reply = i >= 0 ? (items[i] as { text: string }).text : ''
+    const r = goalNext(this.goal, reply, this.usage.cost ?? 0, this.cancelled)
+    this.goal = r.goal
+    this.events.state(this)
+    if (r.prompt) { this.queue.push({ text: r.prompt, images: [], goal: true }); void this.drain() }
+  }
+
+  /** Start, pause, resume or stop the goal for this chat. */
+  setGoal(action: 'start' | 'pause' | 'resume' | 'stop', opts: { objective?: string; maxTurns?: number; maxCost?: number } = {}): void {
+    if (action === 'start') {
+      if (!opts.objective?.trim()) return
+      this.goal = { objective: opts.objective.trim(), status: 'active', turns: 0, maxTurns: opts.maxTurns ?? 20, maxCost: opts.maxCost ?? 0, costAtStart: this.usage.cost ?? 0 }
+      this.events.state(this)
+      this.queue.push({ text: startPrompt(this.goal.objective), images: [], goal: true })
+      this.events.item(this, this.transcript.user(`🎯 Goal: ${this.goal.objective}`))
+      if (!this.busy) void this.drain()
+      return
+    }
+    if (this.goal === undefined) return
+    if (action === 'pause') this.goal = { ...this.goal, status: 'paused', reason: 'paused by you' }
+    if (action === 'stop') { this.goal = { ...this.goal, status: 'stopped', reason: 'stopped by you' }; this.queue = this.queue.filter(q => !q.goal) }
+    if (action === 'resume' && this.goal.status !== 'done') {
+      this.goal = { ...this.goal, status: 'active', reason: undefined, ...this.goal.status === 'limit' ? { maxTurns: this.goal.turns + Math.max(5, Math.ceil(this.goal.maxTurns / 2)) } : {} }
+      if (!this.busy) { this.queue.push({ text: `Continue working toward the goal: ${this.goal.objective}`, images: [], goal: true }); void this.drain() }
+    }
+    this.events.state(this)
   }
 
   /** omp names sessions by itself only in its TUI; over ACP ask once with `/rename` (no args = generate). */
@@ -222,6 +262,7 @@ export class OmpSession {
 
   /** Stop the running turn and drop queued prompts. */
   cancel(): void {
+    this.cancelled = true
     for (const id of [...this.asks.keys()]) this.answer(id, 'cancel')
     for (const id of [...this.permits.keys()]) this.choose(id, undefined)
     this.queue = []
