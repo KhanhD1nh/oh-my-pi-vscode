@@ -32,7 +32,7 @@ function statusLine() {
     t.stats || s.total ? seg('out', '↑', t.stats && !t.busy ? fmtTok(t.stats.output) : fmtTok((t.stats?.output ?? 0) + Math.round(s.chars / 4)), 'Output tokens (omp session' + (t.busy ? ' + streaming estimate)' : ')')) : null,
     t.stats?.cacheRead ? seg('cache', '⛁', fmtTok(t.stats.cacheRead), `Cache read${t.stats.input + t.stats.cacheRead ? ` · ${(t.stats.cacheRead / (t.stats.input + t.stats.cacheRead) * 100).toFixed(0)}% hit` : ''}`) : null,
     seg('rate', '⚡', rate ? `${rate} tok/s` : t.stats?.apiMs ? `${(t.stats.output / (t.stats.apiMs / 1000)).toFixed(1)} tok/s` : '', rate ? 'Output speed now (estimated)' : 'Average model speed (omp session)'),
-    seg('cost', '', (u.cost ?? t.stats?.cost) ? `${(u.cost ?? t.stats.cost).toFixed((u.cost ?? t.stats.cost) < 1 ? 4 : 2)}` : '', 'Session cost (omp)'))
+    seg('cost', '', (u.cost ?? t.stats?.cost) ? '$' + (u.cost ?? t.stats.cost).toFixed((u.cost ?? t.stats.cost) < 1 ? 3 : 2) : '', 'Session cost (omp)'))
 }
 /** Rebuild the status line only when what it shows changed (it is asked every second). */
 function refreshStatus() {
@@ -63,7 +63,8 @@ function bgChip() {
   const label = [agents.length ? `${agents.length} agent${agents.length > 1 ? 's' : ''}` : '', jobs.length ? `${jobs.length} bg` : ''].filter(Boolean).join(' · ')
   return h('button', { class: `chip-btn jobs${S.menu === 'jobs' ? ' open' : ''}`, title: 'Subagents and background jobs', onclick: () => openMenu('jobs') }, agents.length ? runDot() : h('span', { class: 'live busy' }), h('span', { class: 'label' }, label))
 }
-// live timers on running agent cards
+// live timers on running tool lines and agent cards
+EVERY_SECOND.push(() => { for (const el of document.querySelectorAll('.tool-time.live[data-since]')) { const v = took(Date.now() - Number(el.dataset.since)); if (el.textContent !== v) el.textContent = v } })
 EVERY_SECOND.push(() => { for (const el of document.querySelectorAll('[data-t0]')) if (el.dataset.t0) { const v = since(Number(el.dataset.t0)); if (el.textContent !== v) el.textContent = v } })
 
 

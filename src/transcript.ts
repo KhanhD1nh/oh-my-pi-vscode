@@ -54,13 +54,16 @@ export class Transcript {
     for (const it of this.items.splice(i)) if (it.type === 'tool') this.tools.delete(it.card.id)
   }
   private seq = 0
+  /** When your last prompt was sent; replies keep it as `since` for the turn's total time. */
+  private lastPromptAt: number | undefined
   private readonly tools = new Map<string, ToolCard>()
 
   private nextId(): string { this.seq += 1; return `i${this.seq}` }
 
   /** Append the user's prompt. */
   user(text: string, images: { mimeType: string; data: string }[] = []): ChatItem {
-    const item: ChatItem = { type: 'user', id: this.nextId(), text, ...images.length ? { images } : {} }
+    this.lastPromptAt = Date.now()
+    const item: ChatItem = { type: 'user', id: this.nextId(), text, at: this.lastPromptAt, ...images.length ? { images } : {} }
     this.items.push(item)
     return item
   }
@@ -104,11 +107,15 @@ export class Transcript {
   private stream(type: 'assistant' | 'thought' | 'user', text: string): ChatItem | undefined {
     if (text === '') return undefined
     const last = this.items[this.items.length - 1]
+    const now = Date.now()
     if (last !== undefined && last.type === type) {
       last.text += text
+      if (last.type !== 'user') last.end = now
       return last
     }
-    const item = { type, id: this.nextId(), text } as ChatItem
+    const since = type === 'user' ? undefined : this.lastPromptAt
+    const item = (type === 'user' ? { type, id: this.nextId(), text, at: now } : { type, id: this.nextId(), text, at: now, end: now, ...since ? { since } : {} }) as ChatItem
+    if (type === 'user') this.lastPromptAt = now
     this.items.push(item)
     return item
   }
@@ -117,13 +124,16 @@ export class Transcript {
     const id = String(update.toolCallId)
     let card = this.tools.get(id)
     if (card === undefined) {
-      card = { id, kind: String(update.kind ?? 'other'), name: String(update.name ?? 'tool'), title: String(update.title ?? update.name ?? 'tool'), status: 'pending' }
+      card = { id, kind: String(update.kind ?? 'other'), name: String(update.name ?? 'tool'), title: String(update.title ?? update.name ?? 'tool'), status: 'pending', startedAt: Date.now() }
       this.tools.set(id, card)
       this.items.push({ type: 'tool', id: `t-${id}`, card })
     }
     if (typeof update.title === 'string') card.title = update.title
     if (typeof update.kind === 'string') card.kind = update.kind
-    if (typeof update.status === 'string') card.status = update.status as ToolCard['status']
+    if (typeof update.status === 'string') {
+      card.status = update.status as ToolCard['status']
+      if ((card.status === 'completed' || card.status === 'failed') && card.endedAt === undefined) card.endedAt = Date.now()
+    }
     const locations = update.locations as Array<{ path?: unknown }> | undefined
     if (typeof locations?.[0]?.path === 'string') card.path = locations[0].path
     if (update.rawInput !== undefined && card.input === undefined) {

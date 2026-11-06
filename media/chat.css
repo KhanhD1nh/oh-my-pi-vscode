@@ -635,3 +635,84 @@ button:focus-visible, .chip-btn:focus-visible, .menu-item:focus-visible, .tabchi
 
 /* The Working line is plain text now; the braille spinner next to it is the only moving thing. */
 .working-label { color: var(--muted); }
+
+/* ── times and reply actions ── */
+.reply-foot { display: flex; align-items: center; gap: 10px; margin-top: 6px; min-height: 22px; font-size: 11.5px; color: var(--muted); font-variant-numeric: tabular-nums; opacity: 0; transition: opacity .15s var(--ease); }
+.step:hover .reply-foot, .reply-foot:focus-within, .step:last-of-type .reply-foot { opacity: 1; }
+.foot-took::before { content: '·'; margin-right: 10px; opacity: .6; }
+.foot-btn { width: 24px; height: 22px; display: inline-grid; place-items: center; border-radius: 6px; color: var(--muted); margin-left: -4px; }
+.foot-btn:hover { background: var(--soft); color: var(--vscode-foreground); }
+.foot-btn svg { width: 14px; height: 14px; }
+.foot-btn.ok { color: var(--vscode-testing-iconPassed, #3fb950); }
+.msg-time { font-size: 11px; color: var(--muted); margin-top: 3px; padding-right: 4px; font-variant-numeric: tabular-nums; opacity: 0; transition: opacity .15s var(--ease); }
+.user-wrap:hover .msg-time { opacity: 1; }
+.tool-time { margin-left: auto; flex: none; font-size: 11.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.tool-stat + .tool-time { margin-left: 10px; }
+
+/* ═══════════════ UI pass: rhythm, hierarchy, quieter chrome ═══════════════ */
+body { --gap-turn: 22px; --gap-step: 2px; --rail: color-mix(in srgb, var(--vscode-foreground) 9%, transparent); }
+.transcript { padding: 10px 18px 20px; }
+/* a turn starts with your prompt: more air above it than between steps */
+.user-wrap { margin: var(--gap-turn) 0 8px; }
+.transcript > .user-wrap:first-child { margin-top: 4px; }
+.msg.user { border-radius: 16px 16px 4px 16px; padding: 9px 14px; line-height: 1.5; background: color-mix(in srgb, var(--vscode-foreground) 7%, var(--vscode-input-background)); border-color: color-mix(in srgb, var(--vscode-foreground) 10%, transparent); }
+.msg-time { margin-top: 4px; }
+/* steps: compact rows on a faint rail */
+.step { padding: 5px 0 6px 22px; }
+.step::after { background: var(--rail); }
+.step::before { width: 6px; height: 6px; left: 4.5px; top: 12px; }
+.step.text::before { background: color-mix(in srgb, var(--vscode-foreground) 35%, transparent); }
+.step.completed::before { background: color-mix(in srgb, var(--vscode-testing-iconPassed, #3fb950) 85%, transparent); }
+/* tool line: verb strong, target secondary, meta on the right */
+.tool-line { gap: 8px; padding: 1px 0; line-height: 1.5; }
+.tool-verb { font-weight: 600; font-size: 0.95em; letter-spacing: .005em; }
+.tool-target { font-size: 0.92em; }
+.tool-target.file { font-family: var(--mono); font-size: 12px; color: var(--muted); text-decoration: none; }
+.tool-target.file .p-dir { opacity: .7; }
+.tool-target.file .p-name { color: var(--vscode-textLink-foreground, var(--accent)); }
+.tool-target.file:hover .p-name { text-decoration: underline; }
+.tool-stat, .tool-time { font-size: 11.5px; }
+/* IN/OUT and diffs: one quiet surface, no box-in-box */
+.io { border: 1px solid var(--line); border-radius: 8px; background: var(--vscode-textCodeBlock-background); margin-top: 6px; }
+.io-row + .io-row { border-top: 1px solid var(--line); }
+.io-k { padding: 9px 0 0 10px; font-size: 10px; letter-spacing: .06em; }
+.io pre { background: none; padding: 6px 10px 6px 0; font-size: 12.5px; }
+.io-v.codeblock > .copy { top: 6px; right: 6px; }
+.tool .diff { border-radius: 8px; border: 1px solid var(--line); margin-top: 6px; }
+.tool-actions { margin-top: 4px; gap: 14px; font-size: 12px; }
+/* reply text: comfortable line length and spacing */
+.step .msg { line-height: 1.62; }
+.step .msg p { margin: 0 0 8px; }
+.step .msg ul, .step .msg ol { margin: 4px 0 8px; padding-left: 20px; }
+.step .msg li { margin: 3px 0; }
+.step .msg code { font-size: 0.86em; padding: 1px 5px; border-radius: 5px; background: color-mix(in srgb, var(--vscode-foreground) 9%, transparent); }
+.step .msg strong { font-weight: 600; color: var(--vscode-foreground); }
+/* code blocks: header row with the language, copy in that row */
+.codeblock { border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: var(--vscode-textCodeBlock-background); margin: 8px 0 10px; }
+.codeblock > pre { background: none; border-radius: 0; padding: 10px 12px; }
+.codeblock.has-lang > pre { padding-top: 8px; }
+.code-head { display: flex; align-items: center; height: 28px; padding: 0 10px; border-bottom: 1px solid var(--line); background: color-mix(in srgb, var(--vscode-foreground) 4%, transparent); }
+.code-head .lang { position: static; font-size: 11px; color: var(--muted); }
+.codeblock:has(> .lang) > pre, .codeblock.has-lang > pre { padding-top: 8px; }
+.codeblock.has-lang > .copy { top: 3px; }
+.copy { font-size: 11px; padding: 2px 8px; }
+/* reply footer sits close to its reply */
+.reply-foot { margin-top: 2px; }
+/* thinking line reads as secondary */
+.thought { font-size: 0.9em; }
+.thought-head { color: var(--muted); }
+/* composer: slightly larger hit areas, clearer focus */
+.composer { border-radius: 14px; }
+.composer textarea { padding: 11px 14px 4px; }
+.composer-bar { padding: 4px 8px 8px 8px; }
+.chip-btn { height: 26px; }
+.composer-bar .send { width: 28px; height: 28px; border-radius: 8px; }
+.statusline { padding: 6px 8px 0; gap: 14px; }
+.seg.cost { font-weight: 500; }
+/* light themes: rail and surfaces need a touch more contrast */
+body.vscode-light { --rail: color-mix(in srgb, var(--vscode-foreground) 14%, transparent); }
+/* IN/OUT cells use .codeblock only for the Copy button: no second box inside the IO frame */
+.io-v.codeblock { border: 0; border-radius: 0; background: none; overflow: visible; margin: 0; }
+.io-v.codeblock > pre { padding: 8px 40px 8px 0; }
+/* code inside a fenced block is not inline code: no chip background */
+.step .msg pre code, .msg pre code { background: none; padding: 0; border-radius: 0; font-size: inherit; }

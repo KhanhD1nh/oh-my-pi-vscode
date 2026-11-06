@@ -39,6 +39,9 @@ export interface ToolCard {
   input?: string
   output?: string
   diff?: { path: string; oldText: string; newText: string }
+  /** When the call started and finished (ms since epoch), for its duration. */
+  startedAt?: number
+  endedAt?: number
   /** omp `todo` tool: the full list after this call. */
   todo?: TodoPhase[]
 }
@@ -48,9 +51,9 @@ export interface TodoPhase { name: string; tasks: { content: string; status: 'pe
 
 /** One transcript item. */
 export type ChatItem =
-  | { type: 'user'; id: string; text: string; images?: { mimeType: string; data: string }[] }
-  | { type: 'assistant'; id: string; text: string }
-  | { type: 'thought'; id: string; text: string }
+  | { type: 'user'; id: string; text: string; images?: { mimeType: string; data: string }[]; at?: number }
+  | { type: 'assistant'; id: string; text: string; at?: number; end?: number; since?: number }
+  | { type: 'thought'; id: string; text: string; at?: number; end?: number }
   | { type: 'tool'; id: string; card: ToolCard }
   | { type: 'error'; id: string; text: string }
   | { type: 'permission'; id: string; title: string; options: { optionId: string; name: string; kind: string }[]; chosen?: string }

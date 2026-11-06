@@ -68,3 +68,15 @@ test('truncateAt drops the prompt and everything after it', () => {
   assert.deepEqual(t.items.map(i => i.type === 'user' ? i.text : i.type), ['one'])
   assert.equal(t.card('k'), undefined)
 })
+
+test('times: prompt sent, reply start/end with the turn start, tool duration', () => {
+  const t = new Transcript()
+  const u = t.user('go')
+  const r = t.apply({ sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: 'hi' } })
+  t.apply({ sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: ' there' } })
+  t.apply({ sessionUpdate: 'tool_call', toolCallId: 'k', name: 'read', title: 'Read', status: 'in_progress' })
+  const done = t.apply({ sessionUpdate: 'tool_call_update', toolCallId: 'k', status: 'completed' })
+  assert.ok(u.type === 'user' && typeof u.at === 'number')
+  assert.ok(r?.type === 'assistant' && r.since === (u as { at: number }).at && typeof r.end === 'number' && r.end >= (r.at ?? 0))
+  assert.ok(done?.type === 'tool' && typeof done.card.startedAt === 'number' && typeof done.card.endedAt === 'number')
+})

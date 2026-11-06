@@ -22,6 +22,8 @@ const ICON = {
   gear: '<circle cx="8" cy="8" r="2"/><path d="M8 1.8v1.6M8 12.6v1.6M3.6 3.6l1.1 1.1M11.3 11.3l1.1 1.1M1.8 8h1.6M12.6 8h1.6M3.6 12.4l1.1-1.1M11.3 4.7l1.1-1.1"/>',
   up: '<path d="M8 13V3M4 7l4-4 4 4"/>', stop: '<rect x="4" y="4" width="8" height="8" rx="1.5" fill="currentColor" stroke="none"/>',
   back: '<path d="M10 3L5 8l5 5"/>', chevron: '<path d="M4 6l4 4 4-4"/>', brain: '<path d="M6 3.5a2 2 0 0 0-3 1.7 2 2 0 0 0 0 3.6A2 2 0 0 0 6 12.5V3.5zM10 3.5a2 2 0 0 1 3 1.7 2 2 0 0 1 0 3.6 2 2 0 0 1-3 3.7V3.5z"/>',
+  copy: '<rect x="5" y="5" width="8.5" height="8.5" rx="1.5"/><path d="M3 10.5V3.8A1.3 1.3 0 0 1 4.3 2.5H10.5"/>',
+  check: '<path d="M3.5 8.5l3 3 6-7"/>',
   image: '<rect x="2" y="3" width="12" height="10" rx="1.5"/><circle cx="6" cy="6.5" r="1"/><path d="M14 11l-3.5-3.5L4 13"/>',
 }
 
@@ -38,6 +40,24 @@ const inline = s => esc(s)
     (m, pre, p, line) => /[/\\]/.test(p) && !p.startsWith('/') ? `${pre}<a class="file" data-path="${p}"${line ? ` data-line="${line}"` : ''}>${p}${line ? ':' + line : ''}</a>` : m)
 /** A pasted error/log with escaped newlines ("…\n    at foo (…)\n…") reads as one long line; show it as a block. */
 const escapedBlob = l => l.length > 160 && (l.match(/\\n/g) ?? []).length >= 3
+/** "8:35 PM" today, "Mon 8:35 PM" this week, "Nov 3, 8:35 PM" older. */
+function clock(ms) {
+  if (!ms) return ''
+  const d = new Date(ms), now = new Date()
+  const time = d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+  if (d.toDateString() === now.toDateString()) return time
+  if (now - d < 6 * 864e5) return `${d.toLocaleDateString([], { weekday: 'short' })} ${time}`
+  return `${d.toLocaleDateString([], { month: 'short', day: 'numeric' })}, ${time}`
+}
+/** "0.4s", "12s", "3m 05s", "1h 02m". */
+function took(ms) {
+  if (ms == null || ms < 0) return ''
+  if (ms < 1000) return `${(ms / 1000).toFixed(1)}s`
+  const s = Math.round(ms / 1000)
+  if (s < 60) return `${s}s`
+  const m = Math.floor(s / 60)
+  return m < 60 ? `${m}m ${String(s % 60).padStart(2, '0')}s` : `${Math.floor(m / 60)}h ${String(m % 60).padStart(2, '0')}m`
+}
 function md(src) {
   const out = []; const L = src.split('\n')
   for (let i = 0; i < L.length; i++) {
@@ -45,7 +65,7 @@ function md(src) {
     if (/^```/.test(l)) {
       const lang = l.slice(3).trim().split(/\s/)[0]
       const b = []; i++; while (i < L.length && !/^```/.test(L[i])) b.push(L[i++])
-      out.push(`<div class="codeblock">${lang ? `<span class="lang">${esc(lang)}</span>` : ''}<button class="copy" title="Copy">Copy</button><pre><code>${esc(b.join('\n'))}</code></pre></div>`)
+      out.push(`<div class="codeblock${lang ? ' has-lang' : ''}">${lang ? `<div class="code-head"><span class="lang">${esc(lang)}</span></div>` : ''}<button class="copy" title="Copy">Copy</button><pre><code>${esc(b.join('\n'))}</code></pre></div>`)
       continue
     }
     const hd = /^(#{1,4})\s+(.*)/.exec(l); if (hd) { out.push(`<h${hd[1].length + 2}>${inline(hd[2])}</h${hd[1].length + 2}>`); continue }
@@ -71,6 +91,11 @@ function md(src) {
 // Tool cards: verbs, diffs, subagent (task) cards, background jobs.
 // ───────────── tools ─────────────
 const VERB = { read: 'Read', edit: 'Update', delete: 'Delete', move: 'Move', search: 'Search', execute: 'Bash', think: 'Think', fetch: 'Fetch', other: 'Tool' }
+/** "modules/fleet/fleet.service.ts" → dim "modules/fleet/" + bold "fleet.service.ts". */
+function pathParts(p) {
+  const i = p.lastIndexOf('/')
+  return i < 0 ? h('span', { class: 'p-name' }, p) : [h('span', { class: 'p-dir' }, p.slice(0, i + 1)), h('span', { class: 'p-name' }, p.slice(i + 1))]
+}
 const shortPath = p => { const parts = p.replace(/\\/g, '/').split('/'); return parts.slice(-3).join('/') }
 function toolTarget(c) {
   if (c.path) return { text: shortPath(c.path), file: c.path }
@@ -93,6 +118,16 @@ function diffEl(d) {
   return h('div', { class: 'diff' }, rows)
 }
 /** Claude Code–style step: bullet on a timeline, verb + target, then an IN/OUT box (bash) or inline diff (edit). */
+/** Duration on a tool line: live while running (ticks once a second), fixed when done; hidden under 1 s. */
+function toolTime(c) {
+  if (!c.startedAt) return null
+  const running = c.status === 'pending' || c.status === 'in_progress'
+  const ms = (c.endedAt ?? Date.now()) - c.startedAt
+  if (!running && ms < 1000) return null
+  const el = h('span', { class: `tool-time${running ? ' live' : ''}`, title: `Started ${new Date(c.startedAt).toLocaleTimeString()}` }, running && ms < 1000 ? '' : took(ms))
+  if (running) el.dataset.since = String(c.startedAt)
+  return el
+}
 /** omp `task` tool: one or more subagents. */
 function taskInfo(c) {
   if (c.name !== 'task') return null
@@ -175,8 +210,9 @@ function toolEl(c, key) {
   const stat = c.diff ? diffStat(c.diff) : null
   const line = h('div', { class: 'tool-line', onclick: () => toggle(key) },
     h('span', { class: 'tool-verb' }, VERB[c.kind] ?? VERB.other),
-    h('span', { class: `tool-target${t.file ? ' file' : ''}`, title: t.file ?? t.text, onclick: t.file ? e => { e.stopPropagation(); send({ type: 'openFile', path: t.file }) } : undefined }, head),
-    stat ? h('span', { class: 'tool-stat' }, h('span', { class: 'plus' }, `+${stat.add}`), ' ', h('span', { class: 'minus' }, `-${stat.del}`)) : null)
+    h('span', { class: `tool-target${t.file ? ' file' : ''}`, title: t.file ?? t.text, onclick: t.file ? e => { e.stopPropagation(); send({ type: 'openFile', path: t.file }) } : undefined }, t.file && head === t.text ? pathParts(t.text) : head),
+    stat ? h('span', { class: 'tool-stat' }, h('span', { class: 'plus' }, `+${stat.add}`), ' ', h('span', { class: 'minus' }, `-${stat.del}`)) : null,
+    toolTime(c))
   const clip = (txt, n) => { const l = txt.split('\n'); return !open && l.length > n ? { text: l.slice(0, n).join('\n'), more: l.length - n } : { text: txt.length > 20000 ? txt.slice(0, 20000) + '\n…' : txt } }
   let body = null
   if (bash) {
@@ -220,17 +256,17 @@ function toggle(key) {
   ;(n?.querySelector('.thought-body') ?? n?.querySelector('.tool')?.children[1])?.classList.add('expand')
 }
 function itemNode(it) {
-  if (it.type === 'user') return h('div', { class: 'user-wrap' }, it.images?.length ? h('div', { class: 'user-imgs' }, it.images.map(i => thumb(`data:${i.mimeType};base64,${i.data}`))) : null, h('div', { class: 'msg user' }, it.text ? h('div', { class: 'msg-text', html: md(it.text) }) : null, userActions(it)))
+  if (it.type === 'user') return h('div', { class: 'user-wrap' }, it.images?.length ? h('div', { class: 'user-imgs' }, it.images.map(i => thumb(`data:${i.mimeType};base64,${i.data}`))) : null, h('div', { class: 'msg user' }, it.text ? h('div', { class: 'msg-text', html: md(it.text) }) : null, userActions(it)), it.at ? h('div', { class: 'msg-time', title: new Date(it.at).toLocaleString() }, clock(it.at)) : null)
   const state = it.type === 'tool' ? it.card.status : it.type === 'error' ? 'failed' : 'text'
   return h('div', { class: `step ${state}` }, itemBody(it))
 }
 function itemBody(it) {
   switch (it.type) {
     case 'user': return h('div', { class: 'msg user', html: md(it.text) })
-    case 'assistant': return h('div', { class: 'msg', html: md(it.text) })
+    case 'assistant': return [h('div', { class: 'msg', html: md(it.text) }), replyFoot(it)]
     case 'thought': {
       const open = S.open.has(it.id)
-      return h('div', { class: 'thought' }, h('div', { class: 'thought-head', onclick: () => toggle(it.id) }, svg(ICON.brain), open ? 'Thinking' : 'Thought for a moment', open ? '' : ' ›'),
+      return h('div', { class: 'thought' }, h('div', { class: 'thought-head', onclick: () => toggle(it.id) }, svg(ICON.brain), open ? 'Thinking' : it.at && it.end && it.end - it.at >= 1000 ? `Thought for ${took(it.end - it.at)}` : 'Thought for a moment', open ? '' : ' ›'),
         open ? h('div', { class: 'thought-body', html: md(it.text) }) : null)
     }
     case 'tool': return toolEl(it.card, it.id)
@@ -238,6 +274,21 @@ function itemBody(it) {
     case 'ask': return askEl(it)
     case 'permission': return permissionEl(it)
   }
+}
+/**
+ * Under each reply: when it finished, how long the turn took (from your prompt), Copy for the raw Markdown.
+ * Shown on hover while streaming, always once the reply is done.
+ */
+function replyFoot(it) {
+  const end = it.end ?? it.at
+  // it.since = your prompt's time, stamped by the host when the reply started; no list scan per reply.
+  const span = it.since && end ? end - it.since : null
+  const copy = h('button', { class: 'foot-btn copy-reply', title: 'Copy reply (Markdown)', 'aria-label': 'Copy reply' }, svg(ICON.copy))
+  copy.dataset.text = it.text
+  return h('div', { class: 'reply-foot' },
+    end ? h('span', { class: 'foot-time', title: new Date(end).toLocaleString() }, clock(end)) : null,
+    span && span >= 1000 ? h('span', { class: 'foot-took', title: 'From your message to the end of this reply' }, took(span)) : null,
+    copy)
 }
 function upsertNode(it) {
   if (!transcriptEl) return
@@ -247,7 +298,11 @@ function upsertNode(it) {
   // classes and listeners; the browser re-lays out one block, not the whole step).
   if (old && it.type === 'assistant') {
     const body = old.querySelector(':scope > .msg')
-    if (body) { const html = md(it.text); if (body.innerHTML !== html) body.innerHTML = html; return }
+    if (body) {
+      const html = md(it.text); if (body.innerHTML !== html) body.innerHTML = html
+      const foot = old.querySelector(':scope > .reply-foot'); if (foot) foot.replaceWith(replyFoot(it))
+      return
+    }
   }
   const fresh = itemNode(it)
   if (old) old.replaceWith(fresh); else { fresh.classList.add('enter'); transcriptEl.insertBefore(fresh, transcriptEl.querySelector('.working')) }
@@ -777,11 +832,15 @@ function render() {
 
 document.addEventListener('click', (e) => {
   // Copy on code blocks and IN/OUT boxes: the full text (data-text) or what the block shows.
-  const cp = e.target.closest?.('.copy')
+  const cp = e.target.closest?.('.copy, .copy-reply')
   if (cp) {
     e.preventDefault(); e.stopPropagation()
     const text = cp.dataset.text ?? cp.parentElement.querySelector('pre')?.innerText ?? ''
-    const done = ok => { cp.textContent = ok ? 'Copied' : 'Failed'; cp.classList.toggle('ok', ok); setTimeout(() => { cp.textContent = 'Copy'; cp.classList.remove('ok') }, 1200) }
+    const iconOnly = cp.classList.contains('copy-reply')
+    const done = ok => {
+      if (iconOnly) { cp.replaceChildren(svg(ok ? ICON.check : ICON.copy)); cp.classList.toggle('ok', ok); cp.title = ok ? 'Copied' : 'Copy failed'; setTimeout(() => { cp.replaceChildren(svg(ICON.copy)); cp.classList.remove('ok'); cp.title = 'Copy reply (Markdown)' }, 1400); return }
+      cp.textContent = ok ? 'Copied' : 'Failed'; cp.classList.toggle('ok', ok); setTimeout(() => { cp.textContent = 'Copy'; cp.classList.remove('ok') }, 1200)
+    }
     // Fallback for contexts without the async clipboard API: a hidden textarea + execCommand.
     const legacy = () => { const t = h('textarea', { style: 'position:fixed;opacity:0' }); t.value = text; document.body.append(t); t.select(); let ok = false; try { ok = document.execCommand('copy') } catch {} t.remove(); done(ok) }
     if (navigator.clipboard?.writeText) navigator.clipboard.writeText(text).then(() => done(true), legacy); else legacy()
@@ -1020,7 +1079,7 @@ function statusLine() {
     t.stats || s.total ? seg('out', '↑', t.stats && !t.busy ? fmtTok(t.stats.output) : fmtTok((t.stats?.output ?? 0) + Math.round(s.chars / 4)), 'Output tokens (omp session' + (t.busy ? ' + streaming estimate)' : ')')) : null,
     t.stats?.cacheRead ? seg('cache', '⛁', fmtTok(t.stats.cacheRead), `Cache read${t.stats.input + t.stats.cacheRead ? ` · ${(t.stats.cacheRead / (t.stats.input + t.stats.cacheRead) * 100).toFixed(0)}% hit` : ''}`) : null,
     seg('rate', '⚡', rate ? `${rate} tok/s` : t.stats?.apiMs ? `${(t.stats.output / (t.stats.apiMs / 1000)).toFixed(1)} tok/s` : '', rate ? 'Output speed now (estimated)' : 'Average model speed (omp session)'),
-    seg('cost', '', (u.cost ?? t.stats?.cost) ? `${(u.cost ?? t.stats.cost).toFixed((u.cost ?? t.stats.cost) < 1 ? 4 : 2)}` : '', 'Session cost (omp)'))
+    seg('cost', '', (u.cost ?? t.stats?.cost) ? '$' + (u.cost ?? t.stats.cost).toFixed((u.cost ?? t.stats.cost) < 1 ? 3 : 2) : '', 'Session cost (omp)'))
 }
 /** Rebuild the status line only when what it shows changed (it is asked every second). */
 function refreshStatus() {
@@ -1051,7 +1110,8 @@ function bgChip() {
   const label = [agents.length ? `${agents.length} agent${agents.length > 1 ? 's' : ''}` : '', jobs.length ? `${jobs.length} bg` : ''].filter(Boolean).join(' · ')
   return h('button', { class: `chip-btn jobs${S.menu === 'jobs' ? ' open' : ''}`, title: 'Subagents and background jobs', onclick: () => openMenu('jobs') }, agents.length ? runDot() : h('span', { class: 'live busy' }), h('span', { class: 'label' }, label))
 }
-// live timers on running agent cards
+// live timers on running tool lines and agent cards
+EVERY_SECOND.push(() => { for (const el of document.querySelectorAll('.tool-time.live[data-since]')) { const v = took(Date.now() - Number(el.dataset.since)); if (el.textContent !== v) el.textContent = v } })
 EVERY_SECOND.push(() => { for (const el of document.querySelectorAll('[data-t0]')) if (el.dataset.t0) { const v = since(Number(el.dataset.t0)); if (el.textContent !== v) el.textContent = v } })
 
 

@@ -11,17 +11,17 @@ function toggle(key) {
   ;(n?.querySelector('.thought-body') ?? n?.querySelector('.tool')?.children[1])?.classList.add('expand')
 }
 function itemNode(it) {
-  if (it.type === 'user') return h('div', { class: 'user-wrap' }, it.images?.length ? h('div', { class: 'user-imgs' }, it.images.map(i => thumb(`data:${i.mimeType};base64,${i.data}`))) : null, h('div', { class: 'msg user' }, it.text ? h('div', { class: 'msg-text', html: md(it.text) }) : null, userActions(it)))
+  if (it.type === 'user') return h('div', { class: 'user-wrap' }, it.images?.length ? h('div', { class: 'user-imgs' }, it.images.map(i => thumb(`data:${i.mimeType};base64,${i.data}`))) : null, h('div', { class: 'msg user' }, it.text ? h('div', { class: 'msg-text', html: md(it.text) }) : null, userActions(it)), it.at ? h('div', { class: 'msg-time', title: new Date(it.at).toLocaleString() }, clock(it.at)) : null)
   const state = it.type === 'tool' ? it.card.status : it.type === 'error' ? 'failed' : 'text'
   return h('div', { class: `step ${state}` }, itemBody(it))
 }
 function itemBody(it) {
   switch (it.type) {
     case 'user': return h('div', { class: 'msg user', html: md(it.text) })
-    case 'assistant': return h('div', { class: 'msg', html: md(it.text) })
+    case 'assistant': return [h('div', { class: 'msg', html: md(it.text) }), replyFoot(it)]
     case 'thought': {
       const open = S.open.has(it.id)
-      return h('div', { class: 'thought' }, h('div', { class: 'thought-head', onclick: () => toggle(it.id) }, svg(ICON.brain), open ? 'Thinking' : 'Thought for a moment', open ? '' : ' ›'),
+      return h('div', { class: 'thought' }, h('div', { class: 'thought-head', onclick: () => toggle(it.id) }, svg(ICON.brain), open ? 'Thinking' : it.at && it.end && it.end - it.at >= 1000 ? `Thought for ${took(it.end - it.at)}` : 'Thought for a moment', open ? '' : ' ›'),
         open ? h('div', { class: 'thought-body', html: md(it.text) }) : null)
     }
     case 'tool': return toolEl(it.card, it.id)
@@ -29,6 +29,21 @@ function itemBody(it) {
     case 'ask': return askEl(it)
     case 'permission': return permissionEl(it)
   }
+}
+/**
+ * Under each reply: when it finished, how long the turn took (from your prompt), Copy for the raw Markdown.
+ * Shown on hover while streaming, always once the reply is done.
+ */
+function replyFoot(it) {
+  const end = it.end ?? it.at
+  // it.since = your prompt's time, stamped by the host when the reply started; no list scan per reply.
+  const span = it.since && end ? end - it.since : null
+  const copy = h('button', { class: 'foot-btn copy-reply', title: 'Copy reply (Markdown)', 'aria-label': 'Copy reply' }, svg(ICON.copy))
+  copy.dataset.text = it.text
+  return h('div', { class: 'reply-foot' },
+    end ? h('span', { class: 'foot-time', title: new Date(end).toLocaleString() }, clock(end)) : null,
+    span && span >= 1000 ? h('span', { class: 'foot-took', title: 'From your message to the end of this reply' }, took(span)) : null,
+    copy)
 }
 function upsertNode(it) {
   if (!transcriptEl) return
@@ -38,7 +53,11 @@ function upsertNode(it) {
   // classes and listeners; the browser re-lays out one block, not the whole step).
   if (old && it.type === 'assistant') {
     const body = old.querySelector(':scope > .msg')
-    if (body) { const html = md(it.text); if (body.innerHTML !== html) body.innerHTML = html; return }
+    if (body) {
+      const html = md(it.text); if (body.innerHTML !== html) body.innerHTML = html
+      const foot = old.querySelector(':scope > .reply-foot'); if (foot) foot.replaceWith(replyFoot(it))
+      return
+    }
   }
   const fresh = itemNode(it)
   if (old) old.replaceWith(fresh); else { fresh.classList.add('enter'); transcriptEl.insertBefore(fresh, transcriptEl.querySelector('.working')) }

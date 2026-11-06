@@ -13,11 +13,15 @@ function render() {
 
 document.addEventListener('click', (e) => {
   // Copy on code blocks and IN/OUT boxes: the full text (data-text) or what the block shows.
-  const cp = e.target.closest?.('.copy')
+  const cp = e.target.closest?.('.copy, .copy-reply')
   if (cp) {
     e.preventDefault(); e.stopPropagation()
     const text = cp.dataset.text ?? cp.parentElement.querySelector('pre')?.innerText ?? ''
-    const done = ok => { cp.textContent = ok ? 'Copied' : 'Failed'; cp.classList.toggle('ok', ok); setTimeout(() => { cp.textContent = 'Copy'; cp.classList.remove('ok') }, 1200) }
+    const iconOnly = cp.classList.contains('copy-reply')
+    const done = ok => {
+      if (iconOnly) { cp.replaceChildren(svg(ok ? ICON.check : ICON.copy)); cp.classList.toggle('ok', ok); cp.title = ok ? 'Copied' : 'Copy failed'; setTimeout(() => { cp.replaceChildren(svg(ICON.copy)); cp.classList.remove('ok'); cp.title = 'Copy reply (Markdown)' }, 1400); return }
+      cp.textContent = ok ? 'Copied' : 'Failed'; cp.classList.toggle('ok', ok); setTimeout(() => { cp.textContent = 'Copy'; cp.classList.remove('ok') }, 1200)
+    }
     // Fallback for contexts without the async clipboard API: a hidden textarea + execCommand.
     const legacy = () => { const t = h('textarea', { style: 'position:fixed;opacity:0' }); t.value = text; document.body.append(t); t.select(); let ok = false; try { ok = document.execCommand('copy') } catch {} t.remove(); done(ok) }
     if (navigator.clipboard?.writeText) navigator.clipboard.writeText(text).then(() => done(true), legacy); else legacy()

@@ -11,6 +11,24 @@ const inline = s => esc(s)
     (m, pre, p, line) => /[/\\]/.test(p) && !p.startsWith('/') ? `${pre}<a class="file" data-path="${p}"${line ? ` data-line="${line}"` : ''}>${p}${line ? ':' + line : ''}</a>` : m)
 /** A pasted error/log with escaped newlines ("…\n    at foo (…)\n…") reads as one long line; show it as a block. */
 const escapedBlob = l => l.length > 160 && (l.match(/\\n/g) ?? []).length >= 3
+/** "8:35 PM" today, "Mon 8:35 PM" this week, "Nov 3, 8:35 PM" older. */
+function clock(ms) {
+  if (!ms) return ''
+  const d = new Date(ms), now = new Date()
+  const time = d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+  if (d.toDateString() === now.toDateString()) return time
+  if (now - d < 6 * 864e5) return `${d.toLocaleDateString([], { weekday: 'short' })} ${time}`
+  return `${d.toLocaleDateString([], { month: 'short', day: 'numeric' })}, ${time}`
+}
+/** "0.4s", "12s", "3m 05s", "1h 02m". */
+function took(ms) {
+  if (ms == null || ms < 0) return ''
+  if (ms < 1000) return `${(ms / 1000).toFixed(1)}s`
+  const s = Math.round(ms / 1000)
+  if (s < 60) return `${s}s`
+  const m = Math.floor(s / 60)
+  return m < 60 ? `${m}m ${String(s % 60).padStart(2, '0')}s` : `${Math.floor(m / 60)}h ${String(m % 60).padStart(2, '0')}m`
+}
 function md(src) {
   const out = []; const L = src.split('\n')
   for (let i = 0; i < L.length; i++) {
@@ -18,7 +36,7 @@ function md(src) {
     if (/^```/.test(l)) {
       const lang = l.slice(3).trim().split(/\s/)[0]
       const b = []; i++; while (i < L.length && !/^```/.test(L[i])) b.push(L[i++])
-      out.push(`<div class="codeblock">${lang ? `<span class="lang">${esc(lang)}</span>` : ''}<button class="copy" title="Copy">Copy</button><pre><code>${esc(b.join('\n'))}</code></pre></div>`)
+      out.push(`<div class="codeblock${lang ? ' has-lang' : ''}">${lang ? `<div class="code-head"><span class="lang">${esc(lang)}</span></div>` : ''}<button class="copy" title="Copy">Copy</button><pre><code>${esc(b.join('\n'))}</code></pre></div>`)
       continue
     }
     const hd = /^(#{1,4})\s+(.*)/.exec(l); if (hd) { out.push(`<h${hd[1].length + 2}>${inline(hd[2])}</h${hd[1].length + 2}>`); continue }

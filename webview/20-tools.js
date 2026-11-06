@@ -1,6 +1,11 @@
 // Tool cards: verbs, diffs, subagent (task) cards, background jobs.
 // ───────────── tools ─────────────
 const VERB = { read: 'Read', edit: 'Update', delete: 'Delete', move: 'Move', search: 'Search', execute: 'Bash', think: 'Think', fetch: 'Fetch', other: 'Tool' }
+/** "modules/fleet/fleet.service.ts" → dim "modules/fleet/" + bold "fleet.service.ts". */
+function pathParts(p) {
+  const i = p.lastIndexOf('/')
+  return i < 0 ? h('span', { class: 'p-name' }, p) : [h('span', { class: 'p-dir' }, p.slice(0, i + 1)), h('span', { class: 'p-name' }, p.slice(i + 1))]
+}
 const shortPath = p => { const parts = p.replace(/\\/g, '/').split('/'); return parts.slice(-3).join('/') }
 function toolTarget(c) {
   if (c.path) return { text: shortPath(c.path), file: c.path }
@@ -23,6 +28,16 @@ function diffEl(d) {
   return h('div', { class: 'diff' }, rows)
 }
 /** Claude Code–style step: bullet on a timeline, verb + target, then an IN/OUT box (bash) or inline diff (edit). */
+/** Duration on a tool line: live while running (ticks once a second), fixed when done; hidden under 1 s. */
+function toolTime(c) {
+  if (!c.startedAt) return null
+  const running = c.status === 'pending' || c.status === 'in_progress'
+  const ms = (c.endedAt ?? Date.now()) - c.startedAt
+  if (!running && ms < 1000) return null
+  const el = h('span', { class: `tool-time${running ? ' live' : ''}`, title: `Started ${new Date(c.startedAt).toLocaleTimeString()}` }, running && ms < 1000 ? '' : took(ms))
+  if (running) el.dataset.since = String(c.startedAt)
+  return el
+}
 /** omp `task` tool: one or more subagents. */
 function taskInfo(c) {
   if (c.name !== 'task') return null
@@ -105,8 +120,9 @@ function toolEl(c, key) {
   const stat = c.diff ? diffStat(c.diff) : null
   const line = h('div', { class: 'tool-line', onclick: () => toggle(key) },
     h('span', { class: 'tool-verb' }, VERB[c.kind] ?? VERB.other),
-    h('span', { class: `tool-target${t.file ? ' file' : ''}`, title: t.file ?? t.text, onclick: t.file ? e => { e.stopPropagation(); send({ type: 'openFile', path: t.file }) } : undefined }, head),
-    stat ? h('span', { class: 'tool-stat' }, h('span', { class: 'plus' }, `+${stat.add}`), ' ', h('span', { class: 'minus' }, `-${stat.del}`)) : null)
+    h('span', { class: `tool-target${t.file ? ' file' : ''}`, title: t.file ?? t.text, onclick: t.file ? e => { e.stopPropagation(); send({ type: 'openFile', path: t.file }) } : undefined }, t.file && head === t.text ? pathParts(t.text) : head),
+    stat ? h('span', { class: 'tool-stat' }, h('span', { class: 'plus' }, `+${stat.add}`), ' ', h('span', { class: 'minus' }, `-${stat.del}`)) : null,
+    toolTime(c))
   const clip = (txt, n) => { const l = txt.split('\n'); return !open && l.length > n ? { text: l.slice(0, n).join('\n'), more: l.length - n } : { text: txt.length > 20000 ? txt.slice(0, 20000) + '\n…' : txt } }
   let body = null
   if (bash) {
