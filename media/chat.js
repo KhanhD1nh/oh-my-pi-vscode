@@ -824,9 +824,11 @@ function statusLine() {
     agents ? seg('agents', '◆', String(agents), 'Subagents running') : null,
     h('span', { class: 'grow' }),
     seg('ctx', '', pct === null ? '' : `${pct.toFixed(1)}% · ${fmtTok(u.used ?? 0)}/${fmtTok(u.size)}`, 'Context used (omp)'),
-    seg('out', '↑', s.total ? fmtTok(Math.round(s.total / 4)) : '', 'Output tokens this tab (estimated)'),
-    seg('rate', '⚡', rate ? `${rate} tok/s` : '', 'Output speed (estimated)'),
-    seg('cost', '', u.cost ? `$${u.cost.toFixed(u.cost < 1 ? 4 : 2)}` : '', 'Session cost (omp)'))
+    t.stats ? seg('tin', '↓', fmtTok(t.stats.input), 'Input tokens (omp session)') : null,
+    t.stats || s.total ? seg('out', '↑', t.stats && !t.busy ? fmtTok(t.stats.output) : fmtTok((t.stats?.output ?? 0) + Math.round(s.chars / 4)), 'Output tokens (omp session' + (t.busy ? ' + streaming estimate)' : ')')) : null,
+    t.stats?.cacheRead ? seg('cache', '⛁', fmtTok(t.stats.cacheRead), `Cache read${t.stats.input + t.stats.cacheRead ? ` · ${(t.stats.cacheRead / (t.stats.input + t.stats.cacheRead) * 100).toFixed(0)}% hit` : ''}`) : null,
+    seg('rate', '⚡', rate ? `${rate} tok/s` : t.stats?.apiMs ? `${(t.stats.output / (t.stats.apiMs / 1000)).toFixed(1)} tok/s` : '', rate ? 'Output speed now (estimated)' : 'Average model speed (omp session)'),
+    seg('cost', '', (u.cost ?? t.stats?.cost) ? `${(u.cost ?? t.stats.cost).toFixed((u.cost ?? t.stats.cost) < 1 ? 4 : 2)}` : '', 'Session cost (omp)'))
 }
 function refreshStatus() { const el = document.getElementById('statusline'); if (el) el.replaceWith(statusLine()) }
 setInterval(() => { if (S.view === 'chat') refreshStatus() }, 1000)

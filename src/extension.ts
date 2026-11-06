@@ -53,7 +53,7 @@ class ChatViewProvider implements vscode.WebviewViewProvider {
   /** omp process per workspace folder path. */
   private readonly hosts = new Map<string, OmpHost>()
   /** Open tabs in display order: session + the folder it runs in. */
-  private tabs: { session: OmpSession; cwd: string; unread: boolean; panel: vscode.WebviewPanel; startedAt: number }[] = []
+  private tabs: { session: OmpSession; cwd: string; unread: boolean; panel: vscode.WebviewPanel; startedAt: number; stats?: import('./types.ts').SessionStats }[] = []
   private spinAt = 0
   private readonly spinner = setInterval(() => this.tickTitles(), 100)
   private active: string | undefined
@@ -88,6 +88,7 @@ class ChatViewProvider implements vscode.WebviewViewProvider {
           this.postTab(s.id, { type: 'tab', tab: this.tabState(s) }); this.tickTitles()
           // Sidebar follows title changes (omp names a session after its first turn) and turn ends.
           if (!s.busy || s.title !== this.lastTitles.get(s.id)) { this.lastTitles.set(s.id, s.title); this.refreshSidebar() }
+          if (!s.busy) void this.refreshTabStats(s.id)
         },
         permission: async (s, title, options) => {
           const where = s?.title ? ` (${s.title})` : ''
@@ -125,6 +126,7 @@ class ChatViewProvider implements vscode.WebviewViewProvider {
       ...t?.unread ? { unread: true } : {},
       ...t ? { folder: t.cwd.replace(/\\/gu, '/').split('/').filter(Boolean).pop() ?? t.cwd, startedAt: t.startedAt } : {},
       ...t && this.branch(t.cwd) ? { branch: this.branch(t.cwd)! } : {},
+      ...t?.stats ? { stats: t.stats } : {},
     }
   }
 
@@ -167,6 +169,7 @@ class ChatViewProvider implements vscode.WebviewViewProvider {
     })
     this.tickTitles()
     this.postTabs()
+    void this.refreshTabStats(session.id)
   }
 
   /** omp's sessions for the current folder, with stats from omp's session files. */
@@ -202,6 +205,16 @@ class ChatViewProvider implements vscode.WebviewViewProvider {
       this.output.appendLine(`restore ${state.sessionId}: ${String(error)}`)
       panel.dispose()
     }
+  }
+
+  /** Re-read omp's session file for one tab and push the totals to its status line. */
+  private async refreshTabStats(id: string): Promise<void> {
+    const t = this.tab(id)
+    if (t === undefined) return
+    const got = (await sessionStats(t.cwd, new Set([id])).catch(() => ({})) as Record<string, import('./types.ts').SessionStats>)[id]
+    if (got === undefined) return
+    t.stats = got
+    this.postTab(id, { type: 'tab', tab: this.tabState(t.session) })
   }
 
   /** Ctrl+Alt+P: show the last chat, or start one. */

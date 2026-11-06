@@ -76,6 +76,9 @@ export interface SessionStats {
   added: number
   removed: number
   model?: string
+  cacheWrite?: number
+  /** Model generation time (duration minus time-to-first-token), ms. */
+  genMs?: number
 }
 
 /** One open tab (omp session) as the webview shows it. */
@@ -93,6 +96,8 @@ export interface TabState {
   usage: { used?: number; size?: number; cost?: number }
   /** Unseen activity since the tab was last active. */
   unread?: boolean
+  /** Totals for this session read from omp's session file. */
+  stats?: SessionStats
   /** Workspace folder name, git branch and tab open time (ms) for the status line. */
   folder?: string
   branch?: string

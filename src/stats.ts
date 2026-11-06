@@ -17,7 +17,7 @@ export function folderKey(cwd: string): string {
 
 /** Fold one session file. Pure over its lines so it can be tested without disk. */
 export function foldSession(lines: Iterable<string>): SessionStats {
-  const s: SessionStats = { cost: 0, input: 0, output: 0, cacheRead: 0, apiMs: 0, prompts: 0, tools: 0, added: 0, removed: 0 }
+  const s: SessionStats = { cost: 0, input: 0, output: 0, cacheRead: 0, apiMs: 0, prompts: 0, tools: 0, added: 0, removed: 0, cacheWrite: 0, genMs: 0 }
   let first: number | undefined
   let last: number | undefined
   for (const line of lines) {
@@ -32,12 +32,16 @@ export function foldSession(lines: Iterable<string>): SessionStats {
       s.input += usage?.input ?? 0
       s.output += usage?.output ?? 0
       s.cacheRead += usage?.cacheRead ?? 0
+      s.cacheWrite = (s.cacheWrite ?? 0) + ((usage as { cacheWrite?: number } | undefined)?.cacheWrite ?? 0)
     }
     if (e.type !== 'message') continue
     const m = e.message as { role?: string; attribution?: string; duration?: number; model?: string; content?: unknown; details?: { diff?: string } }
     if (m.role === 'user' && m.attribution === 'user') s.prompts++
     if (m.role === 'assistant') {
       s.apiMs += m.duration ?? 0
+      // generation time = duration minus time to first token; basis for tok/s like omp's footer
+      const ttft = (m as { ttft?: number }).ttft ?? 0
+      if (m.duration && m.duration > ttft) s.genMs = (s.genMs ?? 0) + (m.duration - ttft)
       if (m.model) s.model = m.model
       if (Array.isArray(m.content)) s.tools += m.content.filter((c: { type?: string }) => c.type === 'toolCall').length
     }
