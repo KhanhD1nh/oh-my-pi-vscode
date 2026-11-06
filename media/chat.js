@@ -24,6 +24,7 @@ const ICON = {
   back: '<path d="M10 3L5 8l5 5"/>', chevron: '<path d="M4 6l4 4 4-4"/>', brain: '<path d="M6 3.5a2 2 0 0 0-3 1.7 2 2 0 0 0 0 3.6A2 2 0 0 0 6 12.5V3.5zM10 3.5a2 2 0 0 1 3 1.7 2 2 0 0 1 0 3.6 2 2 0 0 1-3 3.7V3.5z"/>',
   copy: '<rect x="5" y="5" width="8.5" height="8.5" rx="1.5"/><path d="M3 10.5V3.8A1.3 1.3 0 0 1 4.3 2.5H10.5"/>',
   check: '<path d="M3.5 8.5l3 3 6-7"/>',
+  terminal: '<rect x="1.8" y="3" width="12.4" height="10" rx="1.6"/><path d="M4.5 6.3l2 1.7-2 1.7M8 10h3.5"/>',
   image: '<rect x="2" y="3" width="12" height="10" rx="1.5"/><circle cx="6" cy="6.5" r="1"/><path d="M14 11l-3.5-3.5L4 13"/>',
 }
 
@@ -118,6 +119,18 @@ function diffEl(d) {
   return h('div', { class: 'diff' }, rows)
 }
 /** Claude Code–style step: bullet on a timeline, verb + target, then an IN/OUT box (bash) or inline diff (edit). */
+/**
+ * The command waits for something only you can type (passphrase, password, yes/no). omp cannot take keyboard
+ * input, so offer the command in a VS Code terminal, typed but not run.
+ */
+function inputBanner(c) {
+  if (!c.needsInput) return null
+  const btn = h('button', { class: 'need-btn', onclick: e => { e.stopPropagation(); send({ type: 'runInTerminal', tab: S.active, toolId: c.id }) } }, svg(ICON.terminal), 'Open in terminal')
+  return h('div', { class: 'need-input', role: 'status' },
+    h('span', { class: 'need-ico', 'aria-hidden': 'true' }, '⌨'),
+    h('span', { class: 'need-text' }, h('b', {}, 'Needs your input'), ` — ${c.needsInput}. omp can't type it for you; run it in a terminal.`),
+    btn)
+}
 /** Duration on a tool line: live while running (ticks once a second), fixed when done; hidden under 1 s. */
 function toolTime(c) {
   if (!c.startedAt) return null
@@ -198,7 +211,7 @@ function toolEl(c, key) {
     const line = h('div', { class: 'tool-line', onclick: () => toggle(key) },
       h('span', { class: 'tool-verb' }, 'Background'), h('span', { class: 'tool-target' }, bg.name === 'background' ? (c.title || bg.command).slice(0, 80) : bg.name),
       h('span', { class: `bg-pill ${c.status}` }, c.status === 'completed' ? 'done' : c.status === 'failed' ? 'failed' : 'running'))
-    return h('div', { class: 'tool' }, line, h('div', { class: 'io' }, h('div', { class: 'io-row' }, h('span', { class: 'io-k' }, 'IN'), h('pre', { class: 'io-v' }, bg.command)),
+    return h('div', { class: 'tool' }, line, h('div', { class: 'io' }, inputBanner(c), h('div', { class: 'io-row' }, h('span', { class: 'io-k' }, 'IN'), h('pre', { class: 'io-v' }, bg.command)),
       S.open.has(key) && c.output ? h('div', { class: 'io-row' }, h('span', { class: 'io-k' }, 'OUT'), h('pre', { class: 'io-v' }, c.output.slice(0, 20000))) : null))
   }
 
@@ -217,7 +230,7 @@ function toolEl(c, key) {
   let body = null
   if (bash) {
     const out = c.output ? clip(c.output, 6) : null
-    body = h('div', { class: 'io' },
+    body = h('div', { class: 'io' }, inputBanner(c),
       h('div', { class: 'io-row' }, h('span', { class: 'io-k' }, 'IN'), h('div', { class: 'io-v codeblock' }, copyBtn(cmd || c.title || ''), h('pre', {}, clip(cmd || c.title || '', 4).text))),
       out ? h('div', { class: 'io-row' }, h('span', { class: 'io-k' }, 'OUT'), h('div', { class: 'io-v codeblock' }, copyBtn(c.output), h('pre', {}, out.text), out.more ? h('a', { class: 'io-more', onclick: () => toggle(key) }, `+${out.more} lines`) : null)) : null)
   } else if (c.diff) {

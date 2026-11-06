@@ -39,6 +39,8 @@ export interface ToolCard {
   input?: string
   output?: string
   diff?: { path: string; oldText: string; newText: string }
+  /** Why this command waits for a person (passphrase, password, yes/no…); set by the host from command + output. */
+  needsInput?: string
   /** When the call started and finished (ms since epoch), for its duration. */
   startedAt?: number
   endedAt?: number
@@ -153,6 +155,7 @@ export type WebviewMessage =
   | { type: 'goal'; tab: string; action: 'start' | 'pause' | 'resume' | 'stop'; objective?: string; maxTurns?: number; maxCost?: number }
   | { type: 'setApproval'; value: string }
   | { type: 'agentSteps'; tab: string; toolId: string; name: string }
+  | { type: 'runInTerminal'; tab: string; toolId: string }
   | { type: 'addSelection' }
   | { type: 'mentionPaths'; paths: string[] }
   | { type: 'exportChat'; tab: string; markdown: string }

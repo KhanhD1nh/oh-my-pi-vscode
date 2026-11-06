@@ -85,6 +85,21 @@ export async function handleMessage(p: ChatProvider, m: WebviewMessage, from: st
     case 'permit': p.tab(m.tab)?.session.choose(m.itemId, m.optionId); return
     case 'answer': p.tab(m.tab)?.session.answer(m.itemId, m.action, m.content); return
     case 'rewind': { const t = p.tab(m.tab); if (t) await revertEditsAfter(t.session.transcript.items, m.itemId); return }
+    case 'runInTerminal': {
+      const t = p.tab(m.tab)
+      const card = t?.session.transcript.card(m.toolId)
+      let command = ''
+      try { command = String(JSON.parse(card?.input ?? '{}').command ?? '') } catch { command = '' }
+      if (!t || !command) return
+      // omp's bash tool takes cwd relative to the session folder
+      let cwd = t.cwd
+      try { const c = JSON.parse(card?.input ?? '{}').cwd; if (typeof c === 'string' && c) cwd = /^[A-Za-z]:[\\/]|^\//u.test(c) ? c : vscode.Uri.joinPath(vscode.Uri.file(t.cwd), c).fsPath } catch { /* keep tab folder */ }
+      const term = vscode.window.createTerminal({ name: `OMP: ${command.split(/\s+/u)[0]}`, cwd, iconPath: new vscode.ThemeIcon('terminal') })
+      term.show()
+      // Typed, not executed: you see exactly what will run and press Enter yourself.
+      term.sendText(command, false)
+      return
+    }
     case 'agentSteps': {
       const t = p.tab(m.tab)
       const got = t ? await agentSteps(t.cwd, t.session.id, m.name) : undefined

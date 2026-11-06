@@ -2,6 +2,7 @@
  * Pure fold of ACP `session/update` payloads into chat items. Streaming chunks extend the last item of the
  * same kind; tool calls are keyed by `toolCallId` and updated in place. No VS Code or process access here.
  */
+import { needsInput } from './interactive.ts'
 import type { AskSchema,  ChatItem, ToolCard } from './types.ts'
 
 type Update = Record<string, unknown>
@@ -144,6 +145,12 @@ export class Transcript {
     if (out !== '') card.output = out
     const diff = toolDiff(update)
     if (diff !== undefined) { card.diff = diff; card.path ??= diff.path }
+    if (card.kind === 'execute' || card.name === 'bash') {
+      let args: { command?: string; pty?: boolean } = {}
+      try { args = JSON.parse(card.input ?? '{}') } catch { args = {} }
+      const why = args.command ? needsInput(args.command, card.output ?? '', args.pty === true) : undefined
+      if (why) card.needsInput = why; else delete card.needsInput
+    }
     const phases = (update.rawOutput as { details?: { phases?: unknown } } | undefined)?.details?.phases
     if (card.name === 'todo' && Array.isArray(phases)) card.todo = phases as ToolCard['todo']
     return { type: 'tool', id: `t-${id}`, card }

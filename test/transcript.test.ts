@@ -80,3 +80,12 @@ test('times: prompt sent, reply start/end with the turn start, tool duration', (
   assert.ok(r?.type === 'assistant' && r.since === (u as { at: number }).at && typeof r.end === 'number' && r.end >= (r.at ?? 0))
   assert.ok(done?.type === 'tool' && typeof done.card.startedAt === 'number' && typeof done.card.endedAt === 'number')
 })
+
+test('bash cards waiting for a passphrase are flagged; ordinary ones are not', () => {
+  const t = new Transcript()
+  t.apply({ sessionUpdate: 'tool_call', toolCallId: 's', name: 'bash', kind: 'execute', title: 'ssh', status: 'in_progress', rawInput: { command: 'ssh -p 2222 admin@h', pty: true } })
+  const waiting = t.apply({ sessionUpdate: 'tool_call_update', toolCallId: 's', content: [{ type: 'content', content: { type: 'text', text: "Enter passphrase for key '/home/u/.ssh/id_ed25519': " } }] })
+  assert.equal(waiting?.type === 'tool' ? waiting.card.needsInput : null, 'SSH key passphrase')
+  const ok = t.apply({ sessionUpdate: 'tool_call', toolCallId: 'g', name: 'bash', kind: 'execute', title: 'git', status: 'completed', rawInput: { command: 'git status' } })
+  assert.equal(ok?.type === 'tool' ? ok.card.needsInput : 'x', undefined)
+})
