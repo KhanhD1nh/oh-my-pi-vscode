@@ -76,7 +76,17 @@ window.addEventListener('message', ({ data: m }) => {
       if (firstLoad || m.status !== 'ready') render(); else renderSettingsList()
       return
     }
-    case 'agentSteps': { (S.steps ??= {})[`${m.toolId}:${m.name}`] = m; const it = items().find(x => x.type === 'tool' && x.card.id === m.toolId); if (it && S.view === 'chat') upsertNode(it); return }
+    case 'agentSteps': {
+      const k = `${m.toolId}:${m.name}`
+      const prev = S.steps?.[k]
+      ;(S.steps ??= {})[k] = m
+      if (S.view !== 'chat') return
+      // Unchanged log: touch nothing (keeps the scrollbar still). Changed: patch the list in place.
+      if (prev && prev.steps.length === m.steps.length && prev.steps.every((s, i) => s.status === m.steps[i].status && s.label === m.steps[i].label)) return
+      if (patchAgentSteps(k, m)) return
+      const it = items().find(x => x.type === 'tool' && x.card.id === m.toolId); if (it) upsertNode(it)
+      return
+    }
     case 'approval': S.approval = m.value; if (S.view === 'chat') refreshComposer(); return
     case 'view': go(m.view); return
     case 'insert': {

@@ -108,6 +108,29 @@ function bgInfo(c) {
 }
 const since = ms => { const s = Math.max(0, Math.floor((Date.now() - ms) / 1000)); return s >= 60 ? `${Math.floor(s / 60)}m ${s % 60}s` : `${s}s` }
 const T0 = new Map()
+/** Every step of one subagent (the list scrolls; nothing is cut off). */
+function agentStepNodes(got) {
+  if (!got) return [h('div', { class: 'muted' }, 'Reading subagent log…')]
+  if (!got.steps.length) return [h('div', { class: 'muted' }, 'No steps yet')]
+  return [...got.steps.map(s => h('div', { class: `astep ${s.status}` }, h('span', { class: 'astep-dot' }), s.tool ? h('span', { class: 'astep-tool' }, cap(s.tool)) : null, h('span', { class: 'astep-label' }, s.label))),
+    got.model ? h('div', { class: 'astep-model muted' }, got.model) : null].filter(Boolean)
+}
+/**
+ * Refresh an open step list in place. Rebuilding the whole card every poll reset the scroll and fought a
+ * dragged scrollbar, so only the list contents change: the reader's position is kept, and the list follows
+ * new steps only while it was already at the bottom.
+ */
+function patchAgentSteps(k, got) {
+  const el = document.querySelector(`.agent-steps[data-k="${CSS.escape(k)}"]`)
+  if (!el) return false
+  const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 8
+  const top = el.scrollTop
+  el.replaceChildren(...agentStepNodes(got))
+  el.scrollTop = atBottom ? el.scrollHeight : top
+  const count = el.parentElement?.querySelector('.agent-count')
+  if (count && got?.steps.length) count.textContent = `${got.steps.filter(s => s.tool).length} steps${got.cost ? ` · $${got.cost.toFixed(2)}` : ''}`
+  return true
+}
 function agentEl(c, key, info) {
   const open = S.open.has(key)
   const running = c.status === 'pending' || c.status === 'in_progress'
@@ -125,10 +148,7 @@ function agentEl(c, key, info) {
       h('span', { class: 'agent-task' }, String(t.task ?? '').split('\n')[0]),
       got?.steps.length ? h('span', { class: 'agent-count' }, `${got.steps.filter(s => s.tool).length} steps${got.cost ? ` · $${got.cost.toFixed(2)}` : ''}`) : null)
     if (!isOpen) return row
-    return h('div', {}, row, h('div', { class: 'agent-steps' },
-      !got ? h('div', { class: 'muted' }, 'Reading subagent log…') : !got.steps.length ? h('div', { class: 'muted' }, 'No steps yet') :
-        got.steps.slice(-40).map(s => h('div', { class: `astep ${s.status}` }, h('span', { class: 'astep-dot' }), s.tool ? h('span', { class: 'astep-tool' }, cap(s.tool)) : null, h('span', { class: 'astep-label' }, s.label))),
-      got?.model ? h('div', { class: 'astep-model muted' }, got.model) : null))
+    return h('div', {}, row, h('div', { class: 'agent-steps', 'data-k': k }, agentStepNodes(got)))
   })
   return h('div', { class: 'tool agent' }, head, h('div', { class: 'agents' }, rows),
     open && c.output ? h('pre', { class: 'tool-out' }, c.output.slice(0, 20000)) : null,
@@ -775,7 +795,17 @@ window.addEventListener('message', ({ data: m }) => {
       if (firstLoad || m.status !== 'ready') render(); else renderSettingsList()
       return
     }
-    case 'agentSteps': { (S.steps ??= {})[`${m.toolId}:${m.name}`] = m; const it = items().find(x => x.type === 'tool' && x.card.id === m.toolId); if (it && S.view === 'chat') upsertNode(it); return }
+    case 'agentSteps': {
+      const k = `${m.toolId}:${m.name}`
+      const prev = S.steps?.[k]
+      ;(S.steps ??= {})[k] = m
+      if (S.view !== 'chat') return
+      // Unchanged log: touch nothing (keeps the scrollbar still). Changed: patch the list in place.
+      if (prev && prev.steps.length === m.steps.length && prev.steps.every((s, i) => s.status === m.steps[i].status && s.label === m.steps[i].label)) return
+      if (patchAgentSteps(k, m)) return
+      const it = items().find(x => x.type === 'tool' && x.card.id === m.toolId); if (it) upsertNode(it)
+      return
+    }
     case 'approval': S.approval = m.value; if (S.view === 'chat') refreshComposer(); return
     case 'view': go(m.view); return
     case 'insert': {
