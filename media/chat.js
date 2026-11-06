@@ -172,7 +172,7 @@ function renderWorking() {
   if (!transcriptEl) return
   transcriptEl.querySelector('.working')?.remove()
   const t = tab()
-  if (t.busy) { transcriptEl.append(h('div', { class: 'working' }, h('span', { class: 'work-ico' }, 'π', h('span', { class: 'tab-spin' }, SPIN[spinAt])), h('span', { class: 'working-label shimmer' }), t.queued ? h('span', { class: 'muted' }, ` · ${t.queued} queued`) : null)); updateWorking() }
+  if (t.busy) { transcriptEl.append(h('div', { class: 'working' }, h('span', { class: 'work-ico' }, h('span', { class: 'tab-spin' }, SPIN[spinAt])), h('span', { class: 'working-label shimmer' }), t.queued ? h('span', { class: 'muted' }, ` · ${t.queued} queued`) : null)); updateWorking() }
 }
 
 // ───────────── views ─────────────

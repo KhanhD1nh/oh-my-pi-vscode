@@ -446,3 +446,4 @@ code { font-size: 0.88em; }
 .tool-line:hover .tool-verb { text-decoration: none; }
 .tool-line { cursor: default; }
 .tool-line:has(+ *) , .tool.expandable .tool-line { cursor: pointer; }
+.work-ico { animation: none; font-size: 14px; } .work-ico .tab-spin { width: 14px; }
