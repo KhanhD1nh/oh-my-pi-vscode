@@ -45,6 +45,28 @@ function replyFoot(it) {
     span && span >= 1000 ? h('span', { class: 'foot-took', title: 'From your message to the end of this reply' }, took(span)) : null,
     copy)
 }
+/**
+ * A card rebuilt while you read it must not jump: carry every scrolled box (subagent step lists, long
+ * outputs, diffs) from the old node into the new one. Step lists are moved over as they are — the same
+ * element, so its scroll position and an in-progress scrollbar drag survive; other boxes get their offset back.
+ */
+function keepScrolledParts(old, fresh) {
+  // Moving an element out of the page resets its scroll offset, even when it comes straight back: read every
+  // offset first, put them back right after the swap (same task, before the next paint, so nothing jumps).
+  const restore = []
+  for (const list of old.querySelectorAll('.agent-steps[data-k]')) {
+    const slot = fresh.querySelector(`.agent-steps[data-k="${CSS.escape(list.dataset.k)}"]`)
+    if (!slot) continue
+    const top = list.scrollTop
+    slot.replaceWith(list)
+    restore.push(() => { list.scrollTop = top })
+  }
+  for (const sel of ['.io pre', '.tool-out', '.diff']) {
+    const tops = [...old.querySelectorAll(sel)].map(e => e.scrollTop)
+    fresh.querySelectorAll(sel).forEach((e, i) => { if (tops[i]) restore.push(() => { e.scrollTop = tops[i] }) })
+  }
+  return () => { for (const f of restore) f() }
+}
 function upsertNode(it) {
   if (!transcriptEl) return
   transcriptEl.querySelector('.empty')?.remove()
@@ -60,7 +82,7 @@ function upsertNode(it) {
     }
   }
   const fresh = itemNode(it)
-  if (old) old.replaceWith(fresh); else { fresh.classList.add('enter'); transcriptEl.insertBefore(fresh, transcriptEl.querySelector('.working')) }
+  if (old) { const restore = keepScrolledParts(old, fresh); old.replaceWith(fresh); restore() } else { fresh.classList.add('enter'); transcriptEl.insertBefore(fresh, transcriptEl.querySelector('.working')) }
   nodes.set(it.id, fresh)
 }
 /** Upserts arriving within one frame are applied together: one layout per frame however fast tokens come. */
