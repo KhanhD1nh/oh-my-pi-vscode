@@ -168,7 +168,7 @@ function toggle(key) {
   ;(n?.querySelector('.thought-body') ?? n?.querySelector('.tool')?.children[1])?.classList.add('expand')
 }
 function itemNode(it) {
-  if (it.type === 'user') return h('div', { class: 'user-wrap' }, it.images?.length ? h('div', { class: 'user-imgs' }, it.images.map(i => thumb(`data:${i.mimeType};base64,${i.data}`))) : null, it.text ? h('div', { class: 'msg user', html: md(it.text) }) : null, userActions(it))
+  if (it.type === 'user') return h('div', { class: 'user-wrap' }, it.images?.length ? h('div', { class: 'user-imgs' }, it.images.map(i => thumb(`data:${i.mimeType};base64,${i.data}`))) : null, h('div', { class: 'msg user' }, it.text ? h('div', { class: 'msg-text', html: md(it.text) }) : null, userActions(it)))
   const state = it.type === 'tool' ? it.card.status : it.type === 'error' ? 'failed' : 'text'
   return h('div', { class: `step ${state}` }, itemBody(it))
 }

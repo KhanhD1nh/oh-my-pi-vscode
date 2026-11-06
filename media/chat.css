@@ -490,3 +490,12 @@ code { font-size: 0.88em; }
 .chip-btn.jobs { color: #bd93f9; background: color-mix(in srgb, #bd93f9 12%, transparent); }
 .flash { animation: flash .9s var(--ease); }
 @keyframes flash { 30% { background: color-mix(in srgb, #bd93f9 18%, transparent); } }
+
+/* fork/rewind button lives inside the user bubble, top-right, on hover only */
+.user-wrap:hover { padding-bottom: 0; }
+.msg.user { position: relative; padding-right: 34px; }
+.msg.user .ua { position: absolute; top: 4px; right: 4px; height: auto; }
+.msg.user .ua-btn { position: static; width: 24px; height: 24px; }
+.msg.user .ua-menu { top: 28px; right: 0; }
+.msg-text > :first-child { margin-top: 0; }
+.msg-text > :last-child { margin-bottom: 0; }
