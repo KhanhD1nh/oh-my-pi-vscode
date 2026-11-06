@@ -474,3 +474,19 @@ code { font-size: 0.88em; }
 .live.busy { background: #bd93f9; animation: blink 1s steps(1, end) infinite; }
 .page.sidebar .session-meta { display: flex; gap: 8px; align-items: center; font-size: 0.8em; margin-top: 1px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .diffstat { margin-left: auto; font-family: var(--mono); flex: none; }
+
+/* subagents */
+.agents { margin-top: 6px; border: 1px solid var(--line); border-radius: var(--radius-sm); overflow: hidden; }
+.agent-row { display: flex; align-items: center; gap: 8px; padding: 5px 10px; font-size: 0.92em; min-width: 0; }
+.agent-row + .agent-row { border-top: 1px solid var(--line); }
+.agent-ico { width: 14px; text-align: center; flex: none; color: #bd93f9; }
+.agent-row.completed .agent-ico { color: var(--vscode-testing-iconPassed, #3fb950); }
+.agent-row.failed .agent-ico { color: var(--vscode-errorForeground); }
+.agent-name { font-weight: 600; flex: none; }
+.agent-kind { font-size: 0.8em; padding: 0 6px; border-radius: 8px; background: var(--soft); color: var(--muted); flex: none; }
+.agent-task { color: var(--muted); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* background jobs */
+.bg-pill { margin-left: auto; font-size: 0.78em; padding: 0 7px; border-radius: 8px; color: #50fa7b; background: color-mix(in srgb, #50fa7b 14%, transparent); flex: none; }
+.chip-btn.jobs { color: #bd93f9; background: color-mix(in srgb, #bd93f9 12%, transparent); }
+.flash { animation: flash .9s var(--ease); }
+@keyframes flash { 30% { background: color-mix(in srgb, #bd93f9 18%, transparent); } }

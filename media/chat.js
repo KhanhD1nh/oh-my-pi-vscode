@@ -75,7 +75,49 @@ function diffEl(d) {
   return h('div', { class: 'diff' }, rows)
 }
 /** Claude Code–style step: bullet on a timeline, verb + target, then an IN/OUT box (bash) or inline diff (edit). */
+/** omp `task` tool: one or more subagents. */
+function taskInfo(c) {
+  if (c.name !== 'task') return null
+  let i = {}; try { i = JSON.parse(c.input ?? '{}') } catch {}
+  const tasks = Array.isArray(i.tasks) ? i.tasks : i.task ? [{ name: i.name, agent: i.agent, task: i.task }] : []
+  return tasks.length ? { tasks, context: i.context } : null
+}
+/** bash with `async` or a service `name` keeps running after the tool returns. */
+function bgInfo(c) {
+  if (c.kind !== 'execute' && c.name !== 'bash') return null
+  let i = {}; try { i = JSON.parse(c.input ?? '{}') } catch {}
+  return i.async || i.name ? { name: i.name || 'background', command: i.command ?? '' } : null
+}
+const since = ms => { const s = Math.max(0, Math.floor((Date.now() - ms) / 1000)); return s >= 60 ? `${Math.floor(s / 60)}m ${s % 60}s` : `${s}s` }
+const T0 = new Map()
+function agentEl(c, key, info) {
+  const open = S.open.has(key)
+  const running = c.status === 'pending' || c.status === 'in_progress'
+  if (!T0.has(c.id)) T0.set(c.id, Date.now())
+  const n = info.tasks.length
+  const head = h('div', { class: 'tool-line', onclick: () => toggle(key) },
+    h('span', { class: 'tool-verb' }, n > 1 ? `${n} agents` : 'Agent'),
+    h('span', { class: 'tool-target' }, c.title),
+    h('span', { class: 'tool-stat muted', 'data-t0': running ? String(T0.get(c.id)) : '' }, running ? since(T0.get(c.id)) : c.status === 'failed' ? 'failed' : 'done'))
+  const rows = info.tasks.map(t => h('div', { class: `agent-row ${c.status}` },
+    h('span', { class: 'agent-ico' }, running ? h('span', { class: 'tab-spin' }, SPIN[spinAt]) : c.status === 'failed' ? '✕' : '✓'),
+    h('span', { class: 'agent-name' }, t.name ?? 'task'), t.agent ? h('span', { class: 'agent-kind' }, t.agent) : null,
+    h('span', { class: 'agent-task' }, String(t.task ?? '').split('\n')[0])))
+  return h('div', { class: 'tool agent' }, head, h('div', { class: 'agents' }, rows),
+    open && c.output ? h('pre', { class: 'tool-out' }, c.output.slice(0, 20000)) : null,
+    !open && c.output && !running ? h('a', { class: 'io-more', onclick: () => toggle(key) }, 'Show result') : null)
+}
 function toolEl(c, key) {
+  const ti = taskInfo(c)
+  if (ti) return agentEl(c, key, ti)
+  const bg = bgInfo(c)
+  if (bg) {
+    const line = h('div', { class: 'tool-line', onclick: () => toggle(key) },
+      h('span', { class: 'tool-verb' }, 'Background'), h('span', { class: 'tool-target' }, bg.name), h('span', { class: 'bg-pill' }, 'runs on'))
+    return h('div', { class: 'tool' }, line, h('div', { class: 'io' }, h('div', { class: 'io-row' }, h('span', { class: 'io-k' }, 'IN'), h('pre', { class: 'io-v' }, bg.command)),
+      S.open.has(key) && c.output ? h('div', { class: 'io-row' }, h('span', { class: 'io-k' }, 'OUT'), h('pre', { class: 'io-v' }, c.output.slice(0, 20000))) : null))
+  }
+
   const open = S.open.has(key)
   const t = toolTarget(c)
   const bash = c.kind === 'execute'
@@ -297,6 +339,7 @@ function composer() {
       t.commands.length ? h('button', { class: 'chip-btn icon', title: 'Commands (/)', onclick: () => { const x = document.getElementById('input'); if (!x.value.startsWith('/')) { x.value = '/'; } x.focus(); updateInlineMenus(x); syncAction() } }, svg(MI.slash)) : null,
       h('button', { class: `chip-btn model${S.menu === 'model' ? ' open' : ''}`, title: 'Model', onclick: () => openMenu('model') }, h('span', { class: 'label' }, modelName(t.model)), t.thinking ? h('span', { class: 'sub' }, cap(t.thinking)) : null),
       false && pct !== null ? h('span', { class: 'ctx', title: `${t.usage.used} / ${t.usage.size} tokens${t.usage.cost ? ` · $${t.usage.cost.toFixed(4)}` : ''}` }, `${pct}%`) : null,
+      bgChip(),
       h('span', { class: 'grow' }),
       h('button', { class: `chip-btn${S.menu === 'mode' ? ' open' : ''}${plan ? ' plan' : ''}`, title: 'Mode (Shift+Tab)', onclick: () => openMenu('mode') }, svg(plan ? MI.plan : ap?.icon ?? MI.bolt), h('span', { class: 'label' }, plan ? 'Plan' : ap?.name ?? 'Mode')),
       h('button', { id: 'action', class: 'send', onclick: () => { const x = document.getElementById('input'); if (tab().busy && !x.value.trim() && !S.images.length) send({ type: 'cancel', tab: S.active }); else submit() } }, svg(ICON.up))),
@@ -347,6 +390,15 @@ function menuEl() {
       q && !hits.length ? h('div', { class: 'menu-item muted' }, 'No models match') : null,
       lv.length ? [h('div', { class: 'menu-sep' }), h('div', { class: 'effort' }, svg(ICON.brain), h('span', {}, 'Effort ', h('span', { class: 'muted' }, `(${cap(t.thinking ?? 'auto')})`)), h('span', { class: 'grow' }),
         h('span', { class: 'dots' }, lv.map((l, i) => h('button', { class: `dot${i <= cur ? ' on' : ''}${i === cur ? ' cur' : ''}`, title: cap(l), onclick: e => { e.stopPropagation(); send({ type: 'setThinking', tab: S.active, value: l }); t.thinking = l; refreshComposer() } }))))] : null)
+  }
+  if (S.menu === 'jobs') {
+    const { agents, jobs } = activity()
+    const jump = id => { closeMenu(); const n = nodes.get(id); n?.scrollIntoView({ block: 'center', behavior: 'smooth' }); n?.classList.add('flash'); setTimeout(() => n?.classList.remove('flash'), 900) }
+    return h('div', { class: 'menu', style: 'left:6px;min-width:260px' },
+      agents.length ? [h('div', { class: 'menu-group' }, 'Subagents'), agents.map(a => h('button', { class: 'menu-item', onclick: () => jump(a.id) }, h('span', { class: 'tab-spin' }, SPIN[spinAt]), h('span', {}, a.label), h('span', { class: 'desc' }, since(T0.get(a.cid) ?? Date.now()))))] : null,
+      jobs.length ? [h('div', { class: 'menu-group' }, 'Background'), jobs.map(j => h('button', { class: 'menu-item', onclick: () => jump(j.id) }, h('span', { class: 'live busy' }), h('span', {}, j.label), h('span', { class: 'desc' }, j.command)))] : null,
+      h('div', { class: 'menu-group' }, 'Ask omp'),
+      h('button', { class: 'menu-item', onclick: () => { closeMenu(); send({ type: 'prompt', tab: S.active, text: 'read jobs:// and give me the status of every running task and background service' }) } }, 'Check status of all jobs'))
   }
   if (S.menu === 'add') {
     return h('div', { class: 'menu', style: 'left:6px;min-width:210px' },
@@ -762,7 +814,7 @@ function statusLine() {
   const pct = u.size ? (u.used ?? 0) / u.size * 100 : null
   const secs = s.t0 && s.last > s.t0 ? (s.last - s.t0) / 1000 : 0
   const rate = t.busy && secs > 1 ? (s.chars / 4 / secs).toFixed(1) : null
-  const agents = items().filter(x => x.type === 'tool' && /task|agent/i.test(x.card.name + ' ' + x.card.kind) && (x.card.status === 'in_progress' || x.card.status === 'pending')).length
+  const agents = activity().agents.length
   return h('div', { class: 'statusline', id: 'statusline' },
     seg('time', '⏱', t.startedAt ? fmtDur(Date.now() - t.startedAt) : '', 'Tab open for'),
     seg('path', '▣', t.folder ?? '', S.cwd),
@@ -776,6 +828,29 @@ function statusLine() {
 }
 function refreshStatus() { const el = document.getElementById('statusline'); if (el) el.replaceWith(statusLine()) }
 setInterval(() => { if (S.view === 'chat') refreshStatus() }, 1000)
+
+
+/** Subagents still running and background services started in this chat. */
+function activity() {
+  const agents = [], jobs = []
+  for (const it of items()) {
+    if (it.type !== 'tool') continue
+    const c = it.card, running = c.status === 'pending' || c.status === 'in_progress'
+    const ti = taskInfo(c)
+    if (ti && running) for (const t of ti.tasks) agents.push({ id: it.id, cid: c.id, label: t.name ?? 'task' })
+    const bg = bgInfo(c)
+    if (bg && c.status !== 'failed') jobs.push({ id: it.id, label: bg.name, command: bg.command.slice(0, 40) })
+  }
+  return { agents, jobs }
+}
+function bgChip() {
+  const { agents, jobs } = activity()
+  if (!agents.length && !jobs.length) return null
+  const label = [agents.length ? `${agents.length} agent${agents.length > 1 ? 's' : ''}` : '', jobs.length ? `${jobs.length} bg` : ''].filter(Boolean).join(' · ')
+  return h('button', { class: `chip-btn jobs${S.menu === 'jobs' ? ' open' : ''}`, title: 'Subagents and background jobs', onclick: () => openMenu('jobs') }, agents.length ? h('span', { class: 'tab-spin' }, SPIN[spinAt]) : h('span', { class: 'live busy' }), h('span', { class: 'label' }, label))
+}
+// live timers on running agent cards
+setInterval(() => { for (const el of document.querySelectorAll('[data-t0]')) if (el.dataset.t0) el.textContent = since(Number(el.dataset.t0)) }, 1000)
 
 // boot last: every const above must exist before the first render
 render()
