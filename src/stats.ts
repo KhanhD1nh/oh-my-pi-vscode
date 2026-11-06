@@ -10,7 +10,7 @@ import type { SessionStats } from './types.ts'
 
 const cache = new Map<string, { mtime: number; stats: SessionStats }>()
 
-/** omp's folder key: `D:\WorkSpace\XE-VN` → `--D--WorkSpace-XE-VN--`. */
+/** omp's folder key: `D:\code\app` → `--D--code-app--`. */
 export function folderKey(cwd: string): string {
   return `--${cwd.replace(/[\\/]+$/u, '').replace(/[:\\/]/gu, '-')}--`
 }

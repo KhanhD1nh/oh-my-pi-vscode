@@ -7,7 +7,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/KhanhD1nh/oh-my-pi-desktop"
+    "url": "https://github.com/KhanhD1nh/oh-my-pi-vscode"
   },
   "engines": {
     "vscode": "^1.95.0"

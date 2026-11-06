@@ -4,7 +4,7 @@ import { test } from 'node:test'
 import { folderKey, foldSession } from '../src/stats.ts'
 
 test('folderKey matches omp layout', () => {
-  assert.equal(folderKey('D:\\WorkSpace\\XE-VN'), '--D--WorkSpace-XE-VN--')
+  assert.equal(folderKey('D:\\code\\app'), '--D--code-app--')
 })
 
 test('foldSession sums cost, counts prompts and diff lines', () => {

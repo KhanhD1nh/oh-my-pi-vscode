@@ -1,7 +1,8 @@
 // Render media/chat.js in Chrome with a fake VS Code host and screenshot chat, menus, history and settings.
 import { readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
-const require = createRequire('D:/WorkSpace/omp-desktop/node_modules/.pnpm/playwright-core@1.61.1/node_modules/playwright-core/package.json')
+// Needs playwright-core and Chrome: PLAYWRIGHT_CORE=<path to playwright-core/package.json> CHROME=<chrome.exe>
+const require = createRequire(process.env.PLAYWRIGHT_CORE ?? import.meta.url)
 const { chromium } = require('playwright-core')
 const [out] = process.argv.slice(2)
 const css = readFileSync(new URL('../media/chat.css', import.meta.url), 'utf8')
@@ -15,8 +16,8 @@ const models = [
 const items = [
   { type: 'user', id: 'i1', images: [{ mimeType: 'image/png', data: 'iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAFklEQVR4nGP4z8DAwMDAxMDAwMDAAAANHQEDasKb6QAAAABJRU5ErkJggg==' }], text: 'Fix the date parsing bug in `src/lib/date.ts` and add a test.' },
   { type: 'thought', id: 'i2', text: 'Need to read the file first.' },
-  { type: 'tool', id: 't-1', card: { id: '1', kind: 'read', name: 'read', title: 'Reading date helper', status: 'completed', path: 'D:/WorkSpace/XE-VN/src/lib/date.ts', output: '1: export function parse(s) {' } },
-  { type: 'tool', id: 't-2', card: { id: '2', kind: 'edit', name: 'edit', title: 'Editing date helper', status: 'completed', path: 'D:/WorkSpace/XE-VN/src/lib/date.ts', diff: { path: 'D:/WorkSpace/XE-VN/src/lib/date.ts', oldText: 'export function parse(s) {\n  return new Date(s)\n}', newText: "export function parse(s) {\n  const [d, m, y] = s.split('/')\n  return new Date(+y, +m - 1, +d)\n}" } } },
+  { type: 'tool', id: 't-1', card: { id: '1', kind: 'read', name: 'read', title: 'Reading date helper', status: 'completed', path: 'D:/code/app/src/lib/date.ts', output: '1: export function parse(s) {' } },
+  { type: 'tool', id: 't-2', card: { id: '2', kind: 'edit', name: 'edit', title: 'Editing date helper', status: 'completed', path: 'D:/code/app/src/lib/date.ts', diff: { path: 'D:/code/app/src/lib/date.ts', oldText: 'export function parse(s) {\n  return new Date(s)\n}', newText: "export function parse(s) {\n  const [d, m, y] = s.split('/')\n  return new Date(+y, +m - 1, +d)\n}" } } },
   { type: 'tool', id: 't-3', card: { id: '3', kind: 'execute', name: 'bash', title: 'Run date tests', status: 'completed', input: '{"command":"npx vitest run src/lib"}', output: ' RUN  v3.2.4\n ✓ src/lib/date.test.ts (3 tests) 4ms\n\n Test Files  1 passed (1)\n      Tests  3 passed (3)\n   Start at  10:05:12\n   Duration  412ms\n extra line 1\n extra line 2' } },
   { type: 'ask', id: 'q1', message: 'Two remaining changes need scope before editing:', schema: { properties: {
     model: { type: 'string', title: 'Where should the model name show?', oneOf: [{ const: 'ui', title: 'Desktop UI', description: 'You see the active model.' }, { const: 'ctx', title: 'AI session context', description: 'The agent knows which model answers.' }, { const: 'both', title: 'Both', description: 'Recommended.' }, { const: 'skip', title: 'Skip this' }] },
@@ -34,7 +35,7 @@ const settings = {
     { key: 'statusLine.leftSegments', group: 'model', type: 'array', value: ['model', 'path', 'git'], choices: { kind: 'multi', values: ['model', 'path', 'git', 'cost', 'pr'] }, description: 'Left status line segments' },
   ],
 }
-const browser = await chromium.launch({ executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe', headless: true })
+const browser = await chromium.launch({ executablePath: process.env.CHROME ?? 'C:/Program Files/Google/Chrome/Application/chrome.exe', headless: true })
 const page = await browser.newPage({ viewport: { width: 440, height: 860 }, deviceScaleFactor: 2 })
 page.on('pageerror', e => console.log('PAGEERROR', String(e)))
 await page.setContent(`<html><head><style>${vars}${css}</style></head><body data-mode="${process.env.MODE ?? "panel"}"><div id="app"></div></body></html>`)
@@ -44,11 +45,11 @@ const post = m => page.evaluate(msg => window.dispatchEvent(new MessageEvent('me
 await page.screenshot({ path: `${out}/vsc-empty.png` })
 const base = { thinkingLevels: ['off', 'low', 'medium', 'high'], modes: [{ id: 'default', name: 'Default' }, { id: 'plan', name: 'Plan' }], commands: [{ name: 'plan', description: 'Enter plan mode' }, { name: 'model', description: 'Show current model' }], queued: 0 }
 const tabs = [
-  { ...base, id: 'A', title: 'Fix date parsing', busy: true, folder: 'XE-VN', branch: 'feature/fleet', startedAt: Date.now() - 3725000, queued: 1, model: '9router/cx/gpt-6.1-terra', thinking: 'medium', mode: 'default', usage: { used: 41000, size: 272000, cost: 0.0213 } },
+  { ...base, id: 'A', title: 'Fix date parsing', busy: true, folder: 'app', branch: 'feature/fleet', startedAt: Date.now() - 3725000, queued: 1, model: '9router/cx/gpt-6.1-terra', thinking: 'medium', mode: 'default', usage: { used: 41000, size: 272000, cost: 0.0213 } },
   { ...base, id: 'B', title: 'Refactor', busy: true, model: '9router/cc/claude-sonnet-5-5', thinking: 'high', usage: {} },
   { ...base, id: 'C', title: 'Chat 1', busy: false, unread: true, model: 'openai/gpt-6', usage: {} },
 ]
-await post({ type: 'tabs', tabs, active: 'A', models, cwd: 'D:/WorkSpace/XE-VN' })
+await post({ type: 'tabs', tabs, active: 'A', models, cwd: 'D:/code/app' })
 await post({ type: 'reset', tab: 'A', items })
 await post({ type: 'approval', value: 'yolo' })
 await page.click('.user-imgs img'); await page.waitForTimeout(250); await page.screenshot({ path: `${out}/vsc-lightbox.png` }); console.log('lightbox open:', await page.locator('.lightbox').count()); await page.keyboard.press('Escape'); await page.waitForTimeout(250); console.log('lightbox after esc:', await page.locator('.lightbox').count())
