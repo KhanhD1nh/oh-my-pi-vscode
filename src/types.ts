@@ -76,6 +76,10 @@ export interface TabState {
   usage: { used?: number; size?: number; cost?: number }
   /** Unseen activity since the tab was last active. */
   unread?: boolean
+  /** Workspace folder name, git branch and tab open time (ms) for the status line. */
+  folder?: string
+  branch?: string
+  startedAt?: number
 }
 
 /** Host → webview messages. Tab-scoped messages carry the session id. */

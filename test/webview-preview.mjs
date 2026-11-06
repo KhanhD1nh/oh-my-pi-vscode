@@ -44,7 +44,7 @@ const post = m => page.evaluate(msg => window.dispatchEvent(new MessageEvent('me
 await page.screenshot({ path: `${out}/vsc-empty.png` })
 const base = { thinkingLevels: ['off', 'low', 'medium', 'high'], modes: [{ id: 'default', name: 'Default' }, { id: 'plan', name: 'Plan' }], commands: [{ name: 'plan', description: 'Enter plan mode' }, { name: 'model', description: 'Show current model' }], queued: 0 }
 const tabs = [
-  { ...base, id: 'A', title: 'Fix date parsing', busy: true, queued: 1, model: '9router/cx/gpt-6.1-terra', thinking: 'medium', mode: 'default', usage: { used: 41000, size: 272000, cost: 0.0213 } },
+  { ...base, id: 'A', title: 'Fix date parsing', busy: true, folder: 'XE-VN', branch: 'feature/fleet', startedAt: Date.now() - 3725000, queued: 1, model: '9router/cx/gpt-6.1-terra', thinking: 'medium', mode: 'default', usage: { used: 41000, size: 272000, cost: 0.0213 } },
   { ...base, id: 'B', title: 'Refactor', busy: true, model: '9router/cc/claude-sonnet-5-5', thinking: 'high', usage: {} },
   { ...base, id: 'C', title: 'Chat 1', busy: false, unread: true, model: 'openai/gpt-6', usage: {} },
 ]

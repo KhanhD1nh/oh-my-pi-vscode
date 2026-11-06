@@ -51,7 +51,7 @@ class ChatViewProvider implements vscode.WebviewViewProvider {
   /** omp process per workspace folder path. */
   private readonly hosts = new Map<string, OmpHost>()
   /** Open tabs in display order: session + the folder it runs in. */
-  private tabs: { session: OmpSession; cwd: string; unread: boolean; panel: vscode.WebviewPanel }[] = []
+  private tabs: { session: OmpSession; cwd: string; unread: boolean; panel: vscode.WebviewPanel; startedAt: number }[] = []
   private spinAt = 0
   private readonly spinner = setInterval(() => this.tickTitles(), 100)
   private active: string | undefined
@@ -95,6 +95,15 @@ class ChatViewProvider implements vscode.WebviewViewProvider {
     return host
   }
 
+  /** Current git branch of `cwd` from VS Code's git extension (no git process of our own). */
+  private branch(cwd: string): string | undefined {
+    const git = vscode.extensions.getExtension<{ getAPI(v: 1): { repositories: { rootUri: vscode.Uri; state: { HEAD?: { name?: string } } }[] } }>('vscode.git')
+    if (!git?.isActive) return undefined
+    const norm = (p: string) => p.replace(/\\/gu, '/').toLowerCase()
+    const repo = git.exports.getAPI(1).repositories.filter(r => norm(cwd).startsWith(norm(r.rootUri.fsPath))).sort((a, b) => b.rootUri.fsPath.length - a.rootUri.fsPath.length)[0]
+    return repo?.state.HEAD?.name
+  }
+
   private tab(id: string | undefined) { return this.tabs.find(t => t.session.id === id) }
 
   private markUnread(id: string): void {
@@ -108,6 +117,8 @@ class ChatViewProvider implements vscode.WebviewViewProvider {
       id: s.id, busy: s.busy, queued: s.queue.length, thinkingLevels: s.thinkingLevels, modes: s.modes, commands: s.commands, usage: s.usage,
       ...s.title ? { title: s.title } : {}, ...s.model ? { model: s.model } : {}, ...s.thinking ? { thinking: s.thinking } : {}, ...s.mode ? { mode: s.mode } : {},
       ...t?.unread ? { unread: true } : {},
+      ...t ? { folder: t.cwd.replace(/\\/gu, '/').split('/').filter(Boolean).pop() ?? t.cwd, startedAt: t.startedAt } : {},
+      ...t && this.branch(t.cwd) ? { branch: this.branch(t.cwd)! } : {},
     }
   }
 
@@ -136,7 +147,7 @@ class ChatViewProvider implements vscode.WebviewViewProvider {
     const panel = vscode.window.createWebviewPanel(PANEL_TYPE, session.title ?? 'New chat', { viewColumn: column, preserveFocus: false }, { enableScripts: true, retainContextWhenHidden: true, localResourceRoots: [media] })
     panel.iconPath = vscode.Uri.joinPath(media, 'pi-tab.svg')
     panel.webview.html = this.html(panel.webview, media, 'panel')
-    const entry = { session, cwd, unread: false, panel }
+    const entry = { session, cwd, unread: false, panel, startedAt: Date.now() }
     this.tabs.push(entry)
     this.active = session.id
     panel.webview.onDidReceiveMessage((m: WebviewMessage) => { void this.onMessage(m, session.id) })

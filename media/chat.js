@@ -214,7 +214,7 @@ function chatView() {
     for (const it of list) { const n = itemNode(it); nodes.set(it.id, n); transcriptEl.append(n) }
   }
   renderWorking()
-  const wrap = h('div', { class: 'composer-wrap' }, composer())
+  const wrap = h('div', { class: 'composer-wrap' }, composer(), statusLine())
   queueMicrotask(() => { transcriptEl.scrollTop = transcriptEl.scrollHeight })
   return MODE === 'sidebar' ? [tabbar(), transcriptEl, wrap] : [transcriptEl, wrap]
 }
@@ -296,7 +296,7 @@ function composer() {
       h('button', { class: `chip-btn icon${S.menu === 'add' ? ' open' : ''}`, title: 'Add', onclick: () => openMenu('add') }, svg(ICON.plus)),
       t.commands.length ? h('button', { class: 'chip-btn icon', title: 'Commands (/)', onclick: () => { const x = document.getElementById('input'); if (!x.value.startsWith('/')) { x.value = '/'; } x.focus(); updateInlineMenus(x); syncAction() } }, svg(MI.slash)) : null,
       h('button', { class: `chip-btn model${S.menu === 'model' ? ' open' : ''}`, title: 'Model', onclick: () => openMenu('model') }, h('span', { class: 'label' }, modelName(t.model)), t.thinking ? h('span', { class: 'sub' }, cap(t.thinking)) : null),
-      pct !== null ? h('span', { class: 'ctx', title: `${t.usage.used} / ${t.usage.size} tokens${t.usage.cost ? ` · $${t.usage.cost.toFixed(4)}` : ''}` }, `${pct}%`) : null,
+      false && pct !== null ? h('span', { class: 'ctx', title: `${t.usage.used} / ${t.usage.size} tokens${t.usage.cost ? ` · $${t.usage.cost.toFixed(4)}` : ''}` }, `${pct}%`) : null,
       h('span', { class: 'grow' }),
       h('button', { class: `chip-btn${S.menu === 'mode' ? ' open' : ''}${plan ? ' plan' : ''}`, title: 'Mode (Shift+Tab)', onclick: () => openMenu('mode') }, svg(plan ? MI.plan : ap?.icon ?? MI.bolt), h('span', { class: 'label' }, plan ? 'Plan' : ap?.name ?? 'Mode')),
       h('button', { id: 'action', class: 'send', onclick: () => { const x = document.getElementById('input'); if (tab().busy && !x.value.trim() && !S.images.length) send({ type: 'cancel', tab: S.active }); else submit() } }, svg(ICON.up))),
@@ -588,6 +588,8 @@ window.addEventListener('message', ({ data: m }) => {
       if (i < 0) return
       const was = S.tabs[i]
       S.tabs[i] = m.tab
+      if (m.tab.busy && !was.busy) { const st = (STAT[m.tab.id] ??= { chars: 0, total: 0, t0: 0, last: 0 }); st.chars = 0; st.t0 = 0 }
+      if (m.tab.id === S.active) refreshStatus()
       if (S.view !== 'chat') return
       // Tab strip (spinner / unread / title) always; composer and spinner only for the active tab.
       const strip = document.querySelector('.tabbar')
@@ -604,6 +606,7 @@ window.addEventListener('message', ({ data: m }) => {
     case 'upsert': {
       const list = (S.transcripts[m.tab] ??= [])
       const i = list.findIndex(x => x.id === m.item.id)
+      trackStream(m.tab, m.item, i >= 0 ? list[i].text?.length : 0)
       if (i >= 0) list[i] = m.item; else list.push(m.item)
       if (m.tab === S.active && S.view === 'chat') { stickBottom(() => upsertNode(m.item)); updateWorking() }
       return
@@ -627,8 +630,6 @@ window.addEventListener('message', ({ data: m }) => {
   }
 })
 
-render()
-send({ type: 'ready' })
 
 /** Tab icon: π; while running, 3 dots orbit in a small circle to its right. */
 function piIcon(t) {
@@ -702,3 +703,43 @@ function lightbox(src) {
   document.addEventListener('keydown', onKey)
   document.body.append(box)
 }
+
+// ───────────── status line (like omp CLI) ─────────────
+/** Per-tab output stats: chars streamed this turn and when the turn's first chunk arrived. */
+const STAT = {}
+function trackStream(tabId, item, before) {
+  if (item.type !== 'assistant' && item.type !== 'thought') return
+  const s = (STAT[tabId] ??= { chars: 0, total: 0, t0: 0, last: 0 })
+  const added = item.text.length - (before ?? 0)
+  if (added <= 0) return
+  const now = performance.now()
+  if (!s.t0) s.t0 = now
+  s.chars += added; s.total += added; s.last = now
+}
+const fmtTok = n => n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : n >= 1e3 ? `${(n / 1e3).toFixed(n >= 1e4 ? 0 : 1)}K` : String(n)
+const fmtDur = ms => { const m = Math.floor(ms / 60000); return m >= 60 ? `${Math.floor(m / 60)}h${m % 60 ? ` ${m % 60}m` : ''}` : m ? `${m}m` : `${Math.floor(ms / 1000)}s` }
+function statusLine() {
+  const t = tab(); const s = STAT[S.active] ?? { chars: 0, total: 0, t0: 0, last: 0 }
+  const seg = (cls, icon, text, title) => text ? h('span', { class: `seg ${cls}`, title }, icon ? h('span', { class: 'seg-i' }, icon) : null, text) : null
+  const u = t.usage ?? {}
+  const pct = u.size ? (u.used ?? 0) / u.size * 100 : null
+  const secs = s.t0 && s.last > s.t0 ? (s.last - s.t0) / 1000 : 0
+  const rate = t.busy && secs > 1 ? (s.chars / 4 / secs).toFixed(1) : null
+  const agents = items().filter(x => x.type === 'tool' && /task|agent/i.test(x.card.name + ' ' + x.card.kind) && (x.card.status === 'in_progress' || x.card.status === 'pending')).length
+  return h('div', { class: 'statusline', id: 'statusline' },
+    seg('time', '⏱', t.startedAt ? fmtDur(Date.now() - t.startedAt) : '', 'Tab open for'),
+    seg('path', '▣', t.folder ?? '', S.cwd),
+    seg('git', '⎇', t.branch ?? '', 'Git branch'),
+    agents ? seg('agents', '◆', String(agents), 'Subagents running') : null,
+    h('span', { class: 'grow' }),
+    seg('ctx', '', pct === null ? '' : `${pct.toFixed(1)}% · ${fmtTok(u.used ?? 0)}/${fmtTok(u.size)}`, 'Context used (omp)'),
+    seg('out', '↑', s.total ? fmtTok(Math.round(s.total / 4)) : '', 'Output tokens this tab (estimated)'),
+    seg('rate', '⚡', rate ? `${rate} tok/s` : '', 'Output speed (estimated)'),
+    seg('cost', '', u.cost ? `$${u.cost.toFixed(u.cost < 1 ? 4 : 2)}` : '', 'Session cost (omp)'))
+}
+function refreshStatus() { const el = document.getElementById('statusline'); if (el) el.replaceWith(statusLine()) }
+setInterval(() => { if (S.view === 'chat') refreshStatus() }, 1000)
+
+// boot last: every const above must exist before the first render
+render()
+send({ type: 'ready' })
