@@ -499,3 +499,6 @@ code { font-size: 0.88em; }
 .msg.user .ua-menu { top: 28px; right: 0; }
 .msg-text > :first-child { margin-top: 0; }
 .msg-text > :last-child { margin-bottom: 0; }
+
+.bg-pill.completed { color: var(--muted); background: var(--soft); }
+.bg-pill.failed { color: var(--vscode-errorForeground); background: color-mix(in srgb, var(--vscode-errorForeground) 14%, transparent); }

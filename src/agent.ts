@@ -47,7 +47,7 @@ export class OmpSession {
   title: string | undefined
   usage: { used?: number; size?: number; cost?: number } = {}
   /** Prompts sent while a turn was running; omp gets them one at a time, in order. */
-  queue: { text: string; images: { mimeType: string; data: string }[] }[] = []
+  queue: { text: string; images: { mimeType: string; data: string }[]; shown?: boolean }[] = []
 
   constructor(private readonly host: OmpHost, readonly id: string, private readonly events: SessionEvents) {}
 
@@ -96,16 +96,35 @@ export class OmpSession {
    * while omp works are never lost and never race.
    */
   prompt(text: string, images: { mimeType: string; data: string }[] = []): void {
+    if (this.busy && this.host.steering) { void this.steer(text, images); return }
     this.queue.push({ text, images })
     this.events.state(this)
     if (!this.busy) void this.drain()
+  }
+
+  /**
+   * Hand a message to the running turn so omp reads it at its next step (like typing into the omp TUI
+   * while it works). Falls back to the local queue when omp has no turn to join.
+   */
+  private async steer(text: string, images: { mimeType: string; data: string }[]): Promise<void> {
+    this.events.item(this, this.transcript.user(text, images))
+    const prompt = [{ type: 'text', text }, ...images.map(i => ({ type: 'image', mimeType: i.mimeType, data: i.data }))]
+    try {
+      const r = await this.host.rpc().request('_session/steering', { sessionId: this.id, prompt }) as { outcome?: string; reason?: string }
+      if (r?.outcome === 'promptRequired') { this.queue.push({ text, images, shown: true }); this.events.state(this); if (!this.busy) void this.drain() }
+      else if (r?.outcome === 'failed') this.events.item(this, this.transcript.error(`omp could not take the message mid-turn: ${r.reason ?? 'unknown'}`))
+    } catch (error) {
+      this.queue.push({ text, images, shown: true }); this.events.state(this)
+      if (!this.busy) void this.drain()
+      void error
+    }
   }
 
   private async drain(): Promise<void> {
     while (this.queue.length > 0 && !this.busy) {
       const next = this.queue.shift()!
       this.title ??= next.text.split('\n')[0]!.slice(0, 60)
-      this.events.item(this, this.transcript.user(next.text, next.images))
+      if (!next.shown) this.events.item(this, this.transcript.user(next.text, next.images))
       this.busy = true
       this.events.state(this)
       try {
@@ -180,6 +199,8 @@ export class OmpHost {
   private client: Rpc | undefined
   private starting: Promise<void> | undefined
   readonly sessions = new Map<string, OmpSession>()
+  /** omp accepts `_session/steering` (messages into a running turn). */
+  steering = false
 
   constructor(private readonly command: () => Promise<string>, private readonly cwd: () => string, private readonly events: HostEvents) {}
 
@@ -229,7 +250,8 @@ export class OmpHost {
       NodeReadable.toWeb(child.stdout!) as ReadableStream<Uint8Array>,
     ))
     const rpc = connection.agent as unknown as Rpc
-    await rpc.request(methods.agent.initialize, { protocolVersion: PROTOCOL_VERSION, clientCapabilities: { elicitation: { form: {} } } })
+    const init = await rpc.request(methods.agent.initialize, { protocolVersion: PROTOCOL_VERSION, clientCapabilities: { elicitation: { form: {} } } }) as { _meta?: { steering?: { supported?: boolean } } }
+    this.steering = init?._meta?.steering?.supported === true
     this.client = rpc
   }
 

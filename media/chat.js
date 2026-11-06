@@ -113,7 +113,8 @@ function toolEl(c, key) {
   const bg = bgInfo(c)
   if (bg) {
     const line = h('div', { class: 'tool-line', onclick: () => toggle(key) },
-      h('span', { class: 'tool-verb' }, 'Background'), h('span', { class: 'tool-target' }, bg.name), h('span', { class: 'bg-pill' }, 'runs on'))
+      h('span', { class: 'tool-verb' }, 'Background'), h('span', { class: 'tool-target' }, bg.name === 'background' ? (c.title || bg.command).slice(0, 80) : bg.name),
+      h('span', { class: `bg-pill ${c.status}` }, c.status === 'completed' ? 'done' : c.status === 'failed' ? 'failed' : 'running'))
     return h('div', { class: 'tool' }, line, h('div', { class: 'io' }, h('div', { class: 'io-row' }, h('span', { class: 'io-k' }, 'IN'), h('pre', { class: 'io-v' }, bg.command)),
       S.open.has(key) && c.output ? h('div', { class: 'io-row' }, h('span', { class: 'io-k' }, 'OUT'), h('pre', { class: 'io-v' }, c.output.slice(0, 20000))) : null))
   }
@@ -313,7 +314,7 @@ function syncAction() {
 function composer() {
   const t = tab()
   const ta = h('textarea', {
-    id: 'input', rows: 1, placeholder: t.busy ? 'Queue another message…' : 'Ask omp anything · @ files · / commands',
+    id: 'input', rows: 1, placeholder: t.busy ? 'Message omp while it works…' : 'Ask omp anything · @ files · / commands',
     onkeydown: e => {
       if ((S.menu === 'slash' || S.menu === 'files') && ['ArrowDown', 'ArrowUp', 'Enter', 'Tab'].includes(e.key)) return menuKey(e)
       if (e.key === 'Tab' && e.shiftKey) { e.preventDefault(); cycleMode(); return }
@@ -839,7 +840,7 @@ function activity() {
     const ti = taskInfo(c)
     if (ti && running) for (const t of ti.tasks) agents.push({ id: it.id, cid: c.id, label: t.name ?? 'task' })
     const bg = bgInfo(c)
-    if (bg && c.status !== 'failed') jobs.push({ id: it.id, label: bg.name, command: bg.command.slice(0, 40) })
+    if (bg && running) jobs.push({ id: it.id, label: bg.name, command: bg.command.slice(0, 40) })
   }
   return { agents, jobs }
 }
