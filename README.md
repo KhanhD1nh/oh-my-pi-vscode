@@ -39,10 +39,17 @@ node node_modules/@vscode/vsce/vsce package --no-dependencies
 code --install-extension oh-my-pi-<version>.vsix
 ```
 
-- `src/` — extension host (TypeScript): omp ACP connection, tabs, settings, session stats, updater.
+- `src/` — extension host (TypeScript):
+  - `extension.ts` activation: commands, views, startup checks
+  - `chats.ts` chat tabs, sidebar, status bar · `messages.ts` webview → host messages
+  - `agent.ts` omp ACP connection and sessions · `transcript.ts` stream → chat items · `goal.ts` goal mode
+  - `workspace.ts` open file/diff, revert edits, export · `context.ts` Send to OMP · `git.ts`
+  - `settings.ts` / `settingsPane.ts` omp config · `stats.ts` session-file stats · `compat.ts` bundled omp extensions, format check · `update.ts`
+- `omp-extensions/` — small omp extensions the extension installs into `~/.omp/agent/extensions`.
 - `webview/` — the chat UI as plain browser JS, one file per feature, concatenated in name order into
   `media/chat.js`. Edit `webview/`, not `media/chat.js`.
-- Tests: `node_modules/.bin/esbuild test/<name>.test.ts --bundle --platform=node --outfile=/tmp/t.cjs && node --test /tmp/t.cjs`
+- Tests: `pnpm test` (all `test/*.test.ts`); `pnpm run typecheck`. CI runs both and packages the `.vsix`.
+- Manual checks in a real VS Code window: [docs/manual-test.md](docs/manual-test.md).
 
 ## Release
 

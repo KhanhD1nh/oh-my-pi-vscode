@@ -3,6 +3,7 @@
  * its problems, a git diff, open tabs, the symbol at the cursor. Each returns Markdown for the chat input.
  */
 import * as vscode from 'vscode'
+import { gitRepo } from './git.ts'
 
 const rel = (uri: vscode.Uri) => vscode.workspace.asRelativePath(uri, false).replace(/\\/gu, '/')
 const fence = (lang: string, body: string) => `\`\`\`${lang}\n${body.replace(/\n$/u, '')}\n\`\`\``
@@ -50,17 +51,9 @@ export async function symbolContext(editor: vscode.TextEditor): Promise<string |
   return `${vscode.SymbolKind[best.kind]} \`${best.name}\` in @${rel(editor.document.uri)}#L${r.start.line + 1}-${r.end.line + 1}\n${fence(editor.document.languageId, editor.document.getText(r))}`
 }
 
-interface GitRepo { rootUri: vscode.Uri; diffWithHEAD(path: string): Promise<string>; diffIndexWithHEAD(path: string): Promise<string>; diffWith(ref: string, path: string): Promise<string> }
-function gitRepoFor(uri: vscode.Uri): GitRepo | undefined {
-  const git = vscode.extensions.getExtension<{ getAPI(v: 1): { repositories: GitRepo[] } }>('vscode.git')
-  if (!git?.isActive) return undefined
-  const norm = (p: string) => p.replace(/\\/gu, '/').toLowerCase()
-  return git.exports.getAPI(1).repositories.filter(r => norm(uri.fsPath).startsWith(norm(r.rootUri.fsPath))).sort((a, b) => b.rootUri.fsPath.length - a.rootUri.fsPath.length)[0]
-}
-
 /** Uncommitted changes of a file against HEAD (staged and unstaged), via VS Code's git extension. */
 export async function gitDiffContext(uri: vscode.Uri): Promise<string | undefined> {
-  const repo = gitRepoFor(uri)
+  const repo = gitRepo(uri.fsPath)
   if (repo === undefined) return undefined
   const diff = (await repo.diffWithHEAD(uri.fsPath)).trim()
   if (!diff) return undefined
