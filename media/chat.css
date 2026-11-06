@@ -404,3 +404,26 @@ code { font-size: 0.88em; }
 .menu.models input { margin: 2px 0 4px; }
 .menu-item.mode .roles { margin-left: 6px; font-weight: 400; font-size: 0.8em; color: var(--accent); }
 .menu.models .mi-text small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* sidebar chats list header */
+.new-chat { display: inline-flex; align-items: center; gap: 4px; padding: 3px 10px; border-radius: var(--radius-sm); background: var(--vscode-button-background); color: var(--vscode-button-foreground); font-size: 0.9em; }
+.new-chat:hover { background: var(--vscode-button-hoverBackground); }
+.new-chat svg { width: 13px; height: 13px; }
+.working-label { font-variant-numeric: tabular-nums; }
+
+/* "working" line: π + braille spinner, shimmering label, glowing dot on the running step */
+.working { gap: 10px; padding: 8px 0 8px 1px; }
+.work-ico { display: inline-flex; align-items: center; gap: 2px; color: #bd93f9; font-weight: 700; font-size: 15px; line-height: 1; animation: breathe 1.6s ease-in-out infinite; }
+.work-ico .tab-spin { font-weight: 400; width: 12px; }
+@keyframes breathe { 50% { opacity: .55; } }
+.shimmer {
+  background: linear-gradient(90deg, var(--muted) 0%, var(--muted) 40%, var(--vscode-foreground) 50%, var(--muted) 60%, var(--muted) 100%);
+  background-size: 250% 100%; -webkit-background-clip: text; background-clip: text; color: transparent;
+  animation: shimmer 1.8s linear infinite;
+}
+@keyframes shimmer { from { background-position: 100% 0; } to { background-position: -150% 0; } }
+.step.pending::before, .step.in_progress::before { background: #bd93f9; animation: glow 1.2s ease-in-out infinite; }
+@keyframes glow { 0%, 100% { box-shadow: 0 0 0 0 rgba(189,147,249,.55); } 50% { box-shadow: 0 0 0 5px rgba(189,147,249,0); } }
+.step.in_progress .tool-verb { background: linear-gradient(90deg, var(--vscode-foreground) 40%, #bd93f9 50%, var(--vscode-foreground) 60%); background-size: 250% 100%; -webkit-background-clip: text; background-clip: text; color: transparent; animation: shimmer 1.8s linear infinite; }
+.composer.busy { border-color: color-mix(in srgb, #bd93f9 45%, var(--line)); animation: ring 2.4s ease-in-out infinite; }
+@keyframes ring { 50% { border-color: color-mix(in srgb, #bd93f9 15%, var(--line)); } }

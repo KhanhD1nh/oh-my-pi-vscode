@@ -37,7 +37,7 @@ const settings = {
 const browser = await chromium.launch({ executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe', headless: true })
 const page = await browser.newPage({ viewport: { width: 440, height: 860 }, deviceScaleFactor: 2 })
 page.on('pageerror', e => console.log('PAGEERROR', String(e)))
-await page.setContent(`<html><head><style>${vars}${css}</style></head><body><div id="app"></div></body></html>`)
+await page.setContent(`<html><head><style>${vars}${css}</style></head><body data-mode="${process.env.MODE ?? "panel"}"><div id="app"></div></body></html>`)
 await page.evaluate(() => { window.__sent = []; window.acquireVsCodeApi = () => ({ postMessage: m => window.__sent.push(m) }) })
 await page.addScriptTag({ content: js })
 const post = m => page.evaluate(msg => window.dispatchEvent(new MessageEvent('message', { data: msg })), m)

@@ -103,8 +103,10 @@ function toolEl(c, key) {
 
 
 // ───────────── state ─────────────
+/** 'panel' = one chat in an editor tab; 'sidebar' = history + settings. */
+const MODE = document.body.dataset.mode ?? 'panel'
 const S = {
-  view: 'chat', tabs: [], active: undefined, models: [], cwd: '', transcripts: {},
+  view: MODE === 'sidebar' ? 'history' : 'chat', tabs: [], active: undefined, models: [], cwd: '', transcripts: {},
   sessions: [], settings: { status: 'idle', settings: [], models: [], failed: {} },
   query: '', group: 'model', open: new Set(), images: [], menu: null, sessionQuery: '', modelQuery: '',
   files: [], fileQuery: null, menuIndex: 0, drafts: {},
@@ -154,11 +156,23 @@ function stickBottom(fn) {
   const t = transcriptEl; const near = !t || t.scrollHeight - t.scrollTop - t.clientHeight < 80
   fn(); if (t && near) t.scrollTop = t.scrollHeight
 }
+/** "Thinking… · 249 tokens": what omp is doing now and how much it has written this turn.
+ * ponytail: tokens estimated as chars/4 of streamed text; omp sends no per-turn output count over ACP. */
+function updateWorking() {
+  const el = transcriptEl?.querySelector('.working-label'); if (!el) return
+  const list = items(); let i = list.length - 1; while (i >= 0 && list[i].type !== 'user') i--
+  const turn = list.slice(i + 1)
+  const chars = turn.reduce((n, x) => n + (x.type === 'assistant' || x.type === 'thought' ? x.text.length : x.type === 'tool' ? (x.card.input?.length ?? 0) : 0), 0)
+  const last = turn.at(-1)
+  const verb = last?.type === 'thought' ? 'Thinking…' : last?.type === 'tool' && last.card.status !== 'completed' ? 'Running…' : last?.type === 'assistant' ? 'Writing…' : 'Working…'
+  const tokens = Math.round(chars / 4)
+  el.textContent = tokens ? `${verb} · ${tokens.toLocaleString()} tokens` : verb
+}
 function renderWorking() {
   if (!transcriptEl) return
   transcriptEl.querySelector('.working')?.remove()
   const t = tab()
-  if (t.busy) transcriptEl.append(h('div', { class: 'working' }, h('span', { class: 'spinner' }), 'Working…', t.queued ? h('span', { class: 'muted' }, ` · ${t.queued} queued`) : null))
+  if (t.busy) { transcriptEl.append(h('div', { class: 'working' }, h('span', { class: 'work-ico' }, 'π', h('span', { class: 'tab-spin' }, SPIN[spinAt])), h('span', { class: 'working-label shimmer' }), t.queued ? h('span', { class: 'muted' }, ` · ${t.queued} queued`) : null)); updateWorking() }
 }
 
 // ───────────── views ─────────────
@@ -175,7 +189,8 @@ function tabbar() {
   return h('div', { class: 'topbar tabs-only' }, bar)
 }
 function backbar(title) {
-  return h('div', { class: 'topbar' }, h('button', { class: 'back', onclick: () => go('chat') }, svg(ICON.back), 'Back'), h('div', { class: 'title' }, title))
+  if (MODE === 'sidebar' && title === 'History') return h('div', { class: 'topbar' }, h('div', { class: 'title' }, 'Chats'), h('button', { class: 'new-chat', onclick: () => send({ type: 'newTab' }) }, svg(ICON.plus), 'New chat'))
+  return h('div', { class: 'topbar' }, h('button', { class: 'back', onclick: () => go(MODE === 'sidebar' ? 'history' : 'chat') }, svg(ICON.back), 'Back'), h('div', { class: 'title' }, title))
 }
 function activate(id) { if (id === S.active) return; saveDraft(); S.active = id; S.menu = null; S.fade = true; send({ type: 'activate', tab: id }); render() }
 function go(view) {
@@ -201,7 +216,7 @@ function chatView() {
   renderWorking()
   const wrap = h('div', { class: 'composer-wrap' }, composer())
   queueMicrotask(() => { transcriptEl.scrollTop = transcriptEl.scrollHeight })
-  return [tabbar(), transcriptEl, wrap]
+  return MODE === 'sidebar' ? [tabbar(), transcriptEl, wrap] : [transcriptEl, wrap]
 }
 
 function modelName(sel) { return S.models.find(m => m.selector === sel)?.name ?? (sel ? sel.split('/').pop() : 'Model') }
@@ -246,10 +261,10 @@ function insertAtEnd(ch) { const x = document.getElementById('input'); x.value +
 function syncAction() {
   const b = document.getElementById('action'); const x = document.getElementById('input'); if (!b || !x) return
   const t = tab(); const stop = t.busy && !x.value.trim() && !S.images.length
-  const state = stop ? 'stop' : 'send'; const flip = b.dataset.state && b.dataset.state !== state; b.dataset.state = state
+  const state = stop ? 'stop' : 'send'; const prev = b.dataset.state; const flip = prev !== undefined && prev !== state; b.dataset.state = state
   b.className = `send${stop ? ' stop' : ''}`
   b.title = stop ? 'Stop (Esc)' : t.busy ? 'Queue message (Enter)' : 'Send (Enter)'
-  if (!flip && b.firstChild) return
+  if (prev === state) return
   const icon = svg(stop ? ICON.stop : ICON.up); if (flip) icon.classList.add('swap'); b.replaceChildren(icon)
 }
 
@@ -274,7 +289,7 @@ function composer() {
   const plan = t.mode === 'plan'
   const ap = APPROVAL.find(x => x.id === S.approval)
   const pct = t.usage?.size ? Math.round((t.usage.used ?? 0) / t.usage.size * 100) : null
-  const box = h('div', { class: 'composer', id: 'composer' },
+  const box = h('div', { class: `composer${t.busy ? ' busy' : ''}`, id: 'composer' },
     S.images.length ? h('div', { class: 'attachments' }, S.images.map((img, i) => h('span', { class: 'attach' }, thumb(img.url), h('button', { onclick: () => { S.images.splice(i, 1); refreshComposer() } }, '×')))) : null,
     ta,
     h('div', { class: 'composer-bar' },
@@ -564,6 +579,7 @@ window.addEventListener('message', ({ data: m }) => {
       S.tabs = m.tabs; S.models = m.models; S.cwd = m.cwd
       if (changedActive) { saveDraft(); S.active = m.active }
       if (S.view === 'chat') { if (changedActive || structure) render(); else refreshComposer() }
+      else if (S.view === 'history' && structure) render()
       return
     }
     case 'tab': {
@@ -588,7 +604,7 @@ window.addEventListener('message', ({ data: m }) => {
       const list = (S.transcripts[m.tab] ??= [])
       const i = list.findIndex(x => x.id === m.item.id)
       if (i >= 0) list[i] = m.item; else list.push(m.item)
-      if (m.tab === S.active && S.view === 'chat') stickBottom(() => upsertNode(m.item))
+      if (m.tab === S.active && S.view === 'chat') { stickBottom(() => upsertNode(m.item)); updateWorking() }
       return
     }
     case 'files': if (S.menu === 'files' && m.query === S.fileQuery) { S.files = m.files; S.menuIndex = 0; refreshComposer() } return

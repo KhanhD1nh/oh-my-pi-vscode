@@ -1,5 +1,5 @@
 /**
- * Oh My Pi for VS Code: a sidebar chat backed by `omp acp`. omp is the agent; this extension renders its
+ * Oh My Pi for VS Code: chats in editor tabs backed by `omp acp`, history and settings in the sidebar. omp is the agent; this extension renders its
  * stream, tool cards and diffs, edits omp's own settings, and wires VS Code niceties (tabs per session,
  * open file, diff view, @-file mentions, add selection, permission prompts).
  */
@@ -11,6 +11,8 @@ import { OmpConfigCli } from './settings.ts'
 import type { AgentModelChoice, AgentSetting, HostMessage, TabState, WebviewMessage } from './types.ts'
 
 const DIFF_SCHEME = 'oh-my-pi-diff'
+const PANEL_TYPE = 'ohMyPi.panel'
+const SPIN = '⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏'
 /** omp's global tool-approval setting, shown as the composer's Mode menu. */
 const APPROVAL_KEY = 'tools.approvalMode'
 const APPROVAL_MODES = ['always-ask', 'always-ask-cached', 'write', 'yolo'] as const
@@ -33,7 +35,7 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand('ohMyPi.newSession', () => provider.newTab()),
     vscode.commands.registerCommand('ohMyPi.history', () => provider.showView('history')),
     vscode.commands.registerCommand('ohMyPi.settings', () => provider.showView('settings')),
-    vscode.commands.registerCommand('ohMyPi.focus', () => vscode.commands.executeCommand('ohMyPi.chat.focus')),
+    vscode.commands.registerCommand('ohMyPi.focus', () => provider.focusChat()),
     vscode.commands.registerCommand('ohMyPi.addSelection', () => provider.addSelection()),
     vscode.window.onDidChangeActiveTextEditor(() => provider.folderMaybeChanged()),
     vscode.workspace.onDidChangeWorkspaceFolders(() => provider.folderMaybeChanged()),
@@ -49,7 +51,9 @@ class ChatViewProvider implements vscode.WebviewViewProvider {
   /** omp process per workspace folder path. */
   private readonly hosts = new Map<string, OmpHost>()
   /** Open tabs in display order: session + the folder it runs in. */
-  private tabs: { session: OmpSession; cwd: string; unread: boolean }[] = []
+  private tabs: { session: OmpSession; cwd: string; unread: boolean; panel: vscode.WebviewPanel }[] = []
+  private spinAt = 0
+  private readonly spinner = setInterval(() => this.tickTitles(), 100)
   private active: string | undefined
   private models: AgentModelChoice[] = []
   private settings: AgentSetting[] = []
@@ -76,9 +80,9 @@ class ChatViewProvider implements vscode.WebviewViewProvider {
     let host = this.hosts.get(cwd)
     if (host === undefined) {
       host = new OmpHost(this.command, () => cwd, {
-        item: (s, item) => { this.markUnread(s.id); this.post({ type: 'upsert', tab: s.id, item }) },
-        reset: s => { this.post({ type: 'reset', tab: s.id, items: s.transcript.items }) },
-        state: s => { this.post({ type: 'tab', tab: this.tabState(s) }) },
+        item: (s, item) => { this.markUnread(s.id); this.postTab(s.id, { type: 'upsert', tab: s.id, item }) },
+        reset: s => { this.postTab(s.id, { type: 'reset', tab: s.id, items: s.transcript.items }) },
+        state: s => { this.postTab(s.id, { type: 'tab', tab: this.tabState(s) }); this.tickTitles() },
         permission: async (s, title, options) => {
           const where = s?.title ? ` (${s.title})` : ''
           const pick = await vscode.window.showInformationMessage(`Oh My Pi${where}: ${title}`, { modal: true }, ...options.map(o => o.name))
@@ -95,7 +99,7 @@ class ChatViewProvider implements vscode.WebviewViewProvider {
 
   private markUnread(id: string): void {
     const t = this.tab(id)
-    if (t && id !== this.active && !t.unread) { t.unread = true; this.post({ type: 'tab', tab: this.tabState(t.session) }) }
+    if (t && !t.panel.active && !t.unread) { t.unread = true; this.tickTitles() }
   }
 
   private tabState(s: OmpSession): TabState {
@@ -107,16 +111,58 @@ class ChatViewProvider implements vscode.WebviewViewProvider {
     }
   }
 
+  /** Each panel gets only its own tab; the sidebar gets the list (to mark open sessions). */
   private postTabs(): void {
-    this.post({ type: 'tabs', tabs: this.tabs.map(t => this.tabState(t.session)), models: this.models, cwd: this.tab(this.active)?.cwd ?? this.currentFolder(), ...this.active ? { active: this.active } : {} })
+    for (const t of this.tabs) this.postTab(t.session.id, { type: 'tabs', tabs: [this.tabState(t.session)], active: t.session.id, models: this.models, cwd: t.cwd })
+    this.post({ type: 'tabs', tabs: this.tabs.map(t => this.tabState(t.session)), models: this.models, cwd: this.currentFolder() })
+  }
+
+  private postTab(id: string, message: HostMessage): void { void this.tab(id)?.panel.webview.postMessage(message) }
+
+  /** Editor tab titles: braille spinner while omp works, ● when it finished out of sight. */
+  private tickTitles(): void {
+    this.spinAt = (this.spinAt + 1) % SPIN.length
+    for (const t of this.tabs) {
+      const name = (t.session.title ?? 'New chat').replace(/\s+/gu, ' ').slice(0, 40)
+      const title = t.session.busy ? `${SPIN[this.spinAt]} ${name}` : t.unread ? `● ${name}` : name
+      if (t.panel.title !== title) t.panel.title = title
+    }
+  }
+
+  /** Open a chat panel for `session` next to the other chats (or beside the editor). */
+  private openPanel(session: OmpSession, cwd: string): void {
+    const media = vscode.Uri.joinPath(this.context.extensionUri, 'media')
+    const column = this.tab(this.active)?.panel.viewColumn ?? vscode.ViewColumn.Beside
+    const panel = vscode.window.createWebviewPanel(PANEL_TYPE, session.title ?? 'New chat', { viewColumn: column, preserveFocus: false }, { enableScripts: true, retainContextWhenHidden: true, localResourceRoots: [media] })
+    panel.iconPath = vscode.Uri.joinPath(media, 'pi-tab.svg')
+    panel.webview.html = this.html(panel.webview, media, 'panel')
+    const entry = { session, cwd, unread: false, panel }
+    this.tabs.push(entry)
+    this.active = session.id
+    panel.webview.onDidReceiveMessage((m: WebviewMessage) => { void this.onMessage(m, session.id) })
+    panel.onDidChangeViewState(() => { if (panel.active) { this.active = session.id; if (entry.unread) { entry.unread = false; this.tickTitles() } } })
+    panel.onDidDispose(() => {
+      this.tabs = this.tabs.filter(t => t !== entry)
+      this.hosts.get(cwd)?.close(session.id)
+      if (this.active === session.id) this.active = this.tabs.at(-1)?.session.id
+      this.postTabs()
+    })
+    this.tickTitles()
+    this.postTabs()
+  }
+
+  /** Ctrl+Alt+P: show the last chat, or start one. */
+  focusChat(): void {
+    const t = this.tab(this.active) ?? this.tabs.at(-1)
+    if (t) t.panel.reveal(); else void this.newTab()
   }
 
   resolveWebviewView(view: vscode.WebviewView): void {
     this.view = view
     const media = vscode.Uri.joinPath(this.context.extensionUri, 'media')
     view.webview.options = { enableScripts: true, localResourceRoots: [media] }
-    view.webview.html = this.html(view.webview, media)
-    view.webview.onDidReceiveMessage((m: WebviewMessage) => { void this.onMessage(m) })
+    view.webview.html = this.html(view.webview, media, 'sidebar')
+    view.webview.onDidReceiveMessage((m: WebviewMessage) => { void this.onMessage(m, undefined) })
   }
 
   private post(message: HostMessage): void { void this.view?.webview.postMessage(message) }
@@ -135,13 +181,9 @@ class ChatViewProvider implements vscode.WebviewViewProvider {
     // Serialize: several quick clicks must not race the omp handshake.
     const run = async () => {
       const from = this.tab(this.active)?.session
-      const cwd = this.currentFolder()
+      const cwd = vscode.window.activeTextEditor ? this.currentFolder() : this.tab(this.active)?.cwd ?? this.currentFolder()
       const session = await this.host(cwd).create({ ...from?.model ? { model: from.model } : {}, ...from?.thinking ? { thinking: from.thinking } : {} })
-      this.tabs.push({ session, cwd, unread: false })
-      this.active = session.id
-      this.postTabs()
-      this.post({ type: 'reset', tab: session.id, items: [] })
-      this.post({ type: 'view', view: 'chat' })
+      this.openPanel(session, cwd)
     }
     const prev = this.creating ?? Promise.resolve()
     const next = prev.then(run, run)
@@ -149,39 +191,25 @@ class ChatViewProvider implements vscode.WebviewViewProvider {
     await next
   }
 
-  private closeTab(id: string): void {
-    const i = this.tabs.findIndex(t => t.session.id === id)
-    if (i < 0) return
-    const [t] = this.tabs.splice(i, 1)
-    this.hosts.get(t!.cwd)?.close(id)
-    if (this.active === id) this.active = (this.tabs[i] ?? this.tabs[i - 1])?.session.id
-    this.postTabs()
-    if (this.active) this.activate(this.active)
-    else void this.newTab()
-  }
+  private closeTab(id: string): void { this.tab(id)?.panel.dispose() }
 
-  private activate(id: string): void {
-    const t = this.tab(id)
-    if (t === undefined) return
-    this.active = id
-    t.unread = false
-    this.postTabs()
-    this.post({ type: 'reset', tab: id, items: t.session.transcript.items })
-  }
+  private activate(id: string): void { this.tab(id)?.panel.reveal() }
 
   /** When the editor moves to another workspace folder, new tabs follow it (open tabs keep their folder). */
-  folderMaybeChanged(): void {
-    this.post({ type: 'tabs', tabs: this.tabs.map(t => this.tabState(t.session)), models: this.models, cwd: this.tab(this.active)?.cwd ?? this.currentFolder(), ...this.active ? { active: this.active } : {} })
-  }
+  folderMaybeChanged(): void { this.postTabs() }
 
-  private async onMessage(m: WebviewMessage): Promise<void> {
+  /** @param from - tab id of the sending chat panel, undefined for the sidebar. */
+  private async onMessage(m: WebviewMessage, from: string | undefined): Promise<void> {
+    const reply = (msg: HostMessage) => { if (from === undefined) this.post(msg); else this.postTab(from, msg) }
     try {
       switch (m.type) {
         case 'ready': {
           void this.loadModels()
-          void this.cli.get(APPROVAL_KEY).then(value => this.post({ type: 'approval', value }), () => {})
-          if (this.tabs.length === 0) await this.newTab()
-          else { this.postTabs(); if (this.active) this.activate(this.active) }
+          void this.cli.get(APPROVAL_KEY).then(value => reply({ type: 'approval', value }), () => {})
+          this.postTabs()
+          const t = this.tab(from)
+          if (t) reply({ type: 'reset', tab: t.session.id, items: t.session.transcript.items })
+          else reply({ type: 'sessions', rows: await this.host(this.currentFolder()).list() })
           return
         }
         case 'newTab': await this.newTab(); return
@@ -200,31 +228,26 @@ class ChatViewProvider implements vscode.WebviewViewProvider {
         case 'setMode': await this.tab(m.tab)?.session.setMode(m.value); return
         case 'openFile': await this.openFile(m.path, m.line); return
         case 'openDiff': await this.openDiff(m.tab, m.toolId); return
-        case 'listSessions': this.post({ type: 'sessions', rows: await this.host(this.currentFolder()).list() }); return
+        case 'listSessions': reply({ type: 'sessions', rows: await this.host(this.currentFolder()).list() }); return
         case 'loadSession': {
           const cwd = this.currentFolder()
           const existing = this.tab(m.sessionId)
           if (existing === undefined) {
             const rows = await this.host(cwd).list()
             const row = rows.find(r => r.sessionId === m.sessionId) ?? { sessionId: m.sessionId, cwd }
-            const session = await this.host(cwd).open(row)
-            this.tabs.push({ session, cwd, unread: false })
-          }
-          this.activate(m.sessionId)
-          this.post({ type: 'view', view: 'chat' })
+            this.openPanel(await this.host(cwd).open(row), cwd)
+          } else this.activate(m.sessionId)
           return
         }
         case 'fork': {
           const t = this.tab(m.tab)
           if (t === undefined) return
-          const session = await this.hosts.get(t.cwd)!.fork(t.session)
-          this.tabs.push({ session, cwd: t.cwd, unread: false })
-          this.activate(session.id)
+          this.openPanel(await this.hosts.get(t.cwd)!.fork(t.session), t.cwd)
           return
         }
         case 'setApproval':
           await this.cli.set({ key: APPROVAL_KEY, type: 'enum', options: [...APPROVAL_MODES] }, m.value)
-          this.post({ type: 'approval', value: m.value })
+          for (const x of this.tabs) this.postTab(x.session.id, { type: 'approval', value: m.value })
           return
         case 'addSelection': this.addSelection(); return
         case 'answer': this.tab(m.tab)?.session.answer(m.itemId, m.action, m.content); return
@@ -232,7 +255,7 @@ class ChatViewProvider implements vscode.WebviewViewProvider {
         case 'loadSettings': await this.refreshSettings(); return
         case 'setSetting': this.writeSetting(m.key, m.value); return
         case 'resetSetting': this.resetSetting(m.key); return
-        case 'findFiles': this.post({ type: 'files', query: m.query, files: await this.findFiles(m.query) }); return
+        case 'findFiles': reply({ type: 'files', query: m.query, files: await this.findFiles(m.query, this.tab(from)?.cwd) }); return
       }
     } catch (error) {
       const text = String((error as Error)?.message ?? error)
@@ -242,8 +265,8 @@ class ChatViewProvider implements vscode.WebviewViewProvider {
   }
 
   /** Workspace files matching an @-mention query (fuzzy on path segments), relative to the tab folder. */
-  private async findFiles(query: string): Promise<string[]> {
-    const cwd = this.tab(this.active)?.cwd ?? this.currentFolder()
+  private async findFiles(query: string, folder?: string): Promise<string[]> {
+    const cwd = folder ?? this.currentFolder()
     const base = vscode.Uri.file(cwd)
     const q = query.replace(/\\/g, '/').toLowerCase()
     const glob = q ? `**/*${q.split('/').pop()!.replace(/[[\]{}*?]/g, '')}*` : '**/*'
@@ -303,8 +326,10 @@ class ChatViewProvider implements vscode.WebviewViewProvider {
     const { start, end } = editor.selection
     const range = start.line === end.line ? `${start.line + 1}` : `${start.line + 1}-${end.line + 1}`
     const code = editor.document.getText(editor.selection)
-    void vscode.commands.executeCommand('ohMyPi.chat.focus')
-    this.post({ type: 'insert', text: `@${rel}#L${range}\n\`\`\`\n${code}\n\`\`\`\n` })
+    const t = this.tab(this.active) ?? this.tabs.at(-1)
+    if (t === undefined) return
+    t.panel.reveal()
+    this.postTab(t.session.id, { type: 'insert', text: `@${rel}#L${range}\n\`\`\`\n${code}\n\`\`\`\n` })
   }
 
   private async openFile(path: string, line?: number): Promise<void> {
@@ -353,15 +378,15 @@ class ChatViewProvider implements vscode.WebviewViewProvider {
     await vscode.commands.executeCommand('vscode.diff', before, file, `${vscode.workspace.asRelativePath(file)} (Oh My Pi)`)
   }
 
-  private html(webview: vscode.Webview, media: vscode.Uri): string {
+  private html(webview: vscode.Webview, media: vscode.Uri, mode: 'panel' | 'sidebar'): string {
     const nonce = Array.from({ length: 32 }, () => Math.floor(Math.random() * 36).toString(36)).join('')
     const script = webview.asWebviewUri(vscode.Uri.joinPath(media, 'chat.js'))
     const style = webview.asWebviewUri(vscode.Uri.joinPath(media, 'chat.css'))
     return `<!doctype html><html><head><meta charset="utf-8">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src ${webview.cspSource} data:; style-src ${webview.cspSource}; script-src 'nonce-${nonce}';">
 <meta name="viewport" content="width=device-width, initial-scale=1"><link rel="stylesheet" href="${style}"></head>
-<body><div id="app"></div><script nonce="${nonce}" src="${script}"></script></body></html>`
+<body data-mode="${mode}"><div id="app"></div><script nonce="${nonce}" src="${script}"></script></body></html>`
   }
 
-  dispose(): void { for (const h of this.hosts.values()) h.dispose() }
+  dispose(): void { clearInterval(this.spinner); for (const h of this.hosts.values()) h.dispose() }
 }
