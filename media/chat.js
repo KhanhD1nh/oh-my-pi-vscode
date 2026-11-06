@@ -35,7 +35,12 @@ function md(src) {
   const out = []; const L = src.split('\n')
   for (let i = 0; i < L.length; i++) {
     const l = L[i]
-    if (/^```/.test(l)) { const b = []; i++; while (i < L.length && !/^```/.test(L[i])) b.push(L[i++]); out.push(`<pre><code>${esc(b.join('\n'))}</code></pre>`); continue }
+    if (/^```/.test(l)) {
+      const lang = l.slice(3).trim().split(/\s/)[0]
+      const b = []; i++; while (i < L.length && !/^```/.test(L[i])) b.push(L[i++])
+      out.push(`<div class="codeblock">${lang ? `<span class="lang">${esc(lang)}</span>` : ''}<button class="copy" title="Copy">Copy</button><pre><code>${esc(b.join('\n'))}</code></pre></div>`)
+      continue
+    }
     const hd = /^(#{1,4})\s+(.*)/.exec(l); if (hd) { out.push(`<h${hd[1].length + 2}>${inline(hd[2])}</h${hd[1].length + 2}>`); continue }
     if (/^\s*[-*]\s+/.test(l)) { const b = []; while (i < L.length && /^\s*[-*]\s+/.test(L[i])) b.push(`<li>${inline(L[i++].replace(/^\s*[-*]\s+/, ''))}</li>`); i--; out.push(`<ul>${b.join('')}</ul>`); continue }
     if (/^\s*\d+\.\s+/.test(l)) { const b = []; while (i < L.length && /^\s*\d+\.\s+/.test(L[i])) b.push(`<li>${inline(L[i++].replace(/^\s*\d+\.\s+/, ''))}</li>`); i--; out.push(`<ol>${b.join('')}</ol>`); continue }
@@ -143,8 +148,8 @@ function toolEl(c, key) {
   if (bash) {
     const out = c.output ? clip(c.output, 6) : null
     body = h('div', { class: 'io' },
-      h('div', { class: 'io-row' }, h('span', { class: 'io-k' }, 'IN'), h('pre', { class: 'io-v' }, clip(cmd || c.title || '', 4).text)),
-      out ? h('div', { class: 'io-row' }, h('span', { class: 'io-k' }, 'OUT'), h('div', { class: 'io-v' }, h('pre', {}, out.text), out.more ? h('a', { class: 'io-more', onclick: () => toggle(key) }, `+${out.more} lines`) : null)) : null)
+      h('div', { class: 'io-row' }, h('span', { class: 'io-k' }, 'IN'), h('div', { class: 'io-v codeblock' }, copyBtn(cmd || c.title || ''), h('pre', {}, clip(cmd || c.title || '', 4).text))),
+      out ? h('div', { class: 'io-row' }, h('span', { class: 'io-k' }, 'OUT'), h('div', { class: 'io-v codeblock' }, copyBtn(c.output), h('pre', {}, out.text), out.more ? h('a', { class: 'io-more', onclick: () => toggle(key) }, `+${out.more} lines`) : null)) : null)
   } else if (c.diff) {
     body = h('div', {}, diffEl(c.diff), h('div', { class: 'tool-actions' }, h('a', { onclick: () => send({ type: 'openDiff', tab: S.active, toolId: c.id }) }, 'Open diff'), h('a', { onclick: () => send({ type: 'openFile', path: c.diff.path }) }, 'Open file')))
   } else if (open && (c.output || c.input)) {
@@ -671,6 +676,17 @@ function render() {
 }
 
 document.addEventListener('click', (e) => {
+  // Copy on code blocks and IN/OUT boxes: the full text (data-text) or what the block shows.
+  const cp = e.target.closest?.('.copy')
+  if (cp) {
+    e.preventDefault(); e.stopPropagation()
+    const text = cp.dataset.text ?? cp.parentElement.querySelector('pre')?.innerText ?? ''
+    const done = ok => { cp.textContent = ok ? 'Copied' : 'Failed'; cp.classList.toggle('ok', ok); setTimeout(() => { cp.textContent = 'Copy'; cp.classList.remove('ok') }, 1200) }
+    // Fallback for contexts without the async clipboard API: a hidden textarea + execCommand.
+    const legacy = () => { const t = h('textarea', { style: 'position:fixed;opacity:0' }); t.value = text; document.body.append(t); t.select(); let ok = false; try { ok = document.execCommand('copy') } catch {} t.remove(); done(ok) }
+    if (navigator.clipboard?.writeText) navigator.clipboard.writeText(text).then(() => done(true), legacy); else legacy()
+    return
+  }
   const a = e.target.closest?.('a.file')
   if (a) { e.preventDefault(); send({ type: 'openFile', path: a.dataset.path, ...a.dataset.line ? { line: Number(a.dataset.line) } : {} }); return }
   if (S.menu && !e.target.closest('.menu') && !e.target.closest('.chip-btn') && !e.target.closest('#input')) closeMenu()
@@ -887,6 +903,10 @@ function toggleAgent(k, toolId, name, cardKey) {
   }
   const it = items().find(x => x.id === cardKey); if (it) upsertNode(it)
 }
+
+
+/** Copy button that copies `text` exactly (not the clipped view). */
+function copyBtn(text) { const b = h('button', { class: 'copy', title: 'Copy' }, 'Copy'); b.dataset.text = text ?? ''; return b }
 
 // boot last: every const above must exist before the first render
 render()

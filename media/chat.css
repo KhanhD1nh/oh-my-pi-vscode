@@ -523,3 +523,15 @@ code { font-size: 0.88em; }
 
 .earlier { align-self: center; margin: 4px 0 12px; padding: 4px 12px; border-radius: 12px; color: var(--muted); border: 1px solid var(--line); font-size: 0.85em; }
 .earlier:hover { color: var(--vscode-foreground); background: var(--soft); }
+
+/* copyable code blocks */
+.codeblock { position: relative; margin: 8px 0; }
+.codeblock > pre { margin: 0; }
+.codeblock .lang { position: absolute; top: 6px; left: 12px; font-size: 10.5px; color: var(--muted); font-family: var(--mono); text-transform: lowercase; pointer-events: none; }
+.codeblock:has(> .lang) > pre { padding-top: 24px; }
+.copy { position: absolute; top: 5px; right: 6px; z-index: 1; padding: 2px 8px; border-radius: 5px; font-size: 11px; color: var(--muted); background: var(--vscode-input-background); border: 1px solid var(--line); opacity: 0; transition: opacity .15s var(--ease), color .15s var(--ease); }
+.codeblock:hover > .copy, .copy:focus-visible, .copy.ok { opacity: 1; }
+.copy:hover { color: var(--vscode-foreground); }
+.copy.ok { color: var(--vscode-testing-iconPassed, #3fb950); border-color: currentColor; }
+.io-v.codeblock { margin: 0; }
+.io-v.codeblock > .copy { top: 8px; right: 8px; }
