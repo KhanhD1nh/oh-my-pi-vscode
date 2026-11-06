@@ -154,6 +154,9 @@ export class OmpSession {
     if (this.queue.length > 0 && !this.busy) void this.drain()
   }
 
+  /** Ask omp for a title if this session has none yet (no-op while a turn runs; it names itself after). */
+  ensureNamed(): void { if (!this.named && !this.busy) void this.nameSession() }
+
   /** @internal Session already carries an omp title. */
   markNamed(): void { this.named = true }
 
@@ -318,6 +321,8 @@ export class OmpHost {
     const r = await this.rpc().request(methods.agent.session.load, { sessionId: row.sessionId, cwd: row.cwd || this.cwd(), mcpServers: [] }) as { configOptions?: ConfigOption[] }
     session.readConfig(r?.configOptions ?? [])
     this.events.state(session)
+    // Untitled session that already has a conversation: name it now, not after the next prompt.
+    if (session.transcript.items.some(i => i.type === 'user')) session.ensureNamed()
     return session
   }
 

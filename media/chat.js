@@ -671,7 +671,7 @@ window.addEventListener('message', ({ data: m }) => {
       S.tabs = m.tabs; S.models = m.models; S.cwd = m.cwd
       if (changedActive) { saveDraft(); S.active = m.active }
       if (S.view === 'chat') { if (changedActive || structure) render(); else refreshComposer() }
-      else if (S.view === 'history' && structure) render()
+      else if (S.view === 'history') render()
       return
     }
     case 'tab': {

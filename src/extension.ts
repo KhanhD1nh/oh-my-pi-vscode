@@ -84,7 +84,11 @@ class ChatViewProvider implements vscode.WebviewViewProvider {
       host = new OmpHost(this.command, () => cwd, {
         item: (s, item) => { this.markUnread(s.id); this.postTab(s.id, { type: 'upsert', tab: s.id, item }) },
         reset: s => { this.postTab(s.id, { type: 'reset', tab: s.id, items: s.transcript.items }) },
-        state: s => { this.postTab(s.id, { type: 'tab', tab: this.tabState(s) }); this.tickTitles(); if (!s.busy) this.refreshSidebar() },
+        state: s => {
+          this.postTab(s.id, { type: 'tab', tab: this.tabState(s) }); this.tickTitles()
+          // Sidebar follows title changes (omp names a session after its first turn) and turn ends.
+          if (!s.busy || s.title !== this.lastTitles.get(s.id)) { this.lastTitles.set(s.id, s.title); this.refreshSidebar() }
+        },
         permission: async (s, title, options) => {
           const where = s?.title ? ` (${s.title})` : ''
           const pick = await vscode.window.showInformationMessage(`Oh My Pi${where}: ${title}`, { modal: true }, ...options.map(o => o.name))
@@ -170,14 +174,18 @@ class ChatViewProvider implements vscode.WebviewViewProvider {
     const cwd = this.currentFolder()
     const rows = await this.host(cwd).list()
     const stats = await sessionStats(cwd, new Set(rows.map(r => r.sessionId))).catch(() => ({} as Record<string, never>))
-    return rows.map(r => stats[r.sessionId] ? { ...r, stats: stats[r.sessionId] } : r)
+    return rows.map(r => {
+      const live = this.tab(r.sessionId)?.session.title
+      return { ...r, ...live && live !== r.title ? { title: live } : {}, ...stats[r.sessionId] ? { stats: stats[r.sessionId] } : {} }
+    })
   }
 
+  private readonly lastTitles = new Map<string, string | undefined>()
   private sidebarTimer: ReturnType<typeof setTimeout> | undefined
   /** Debounced: re-list sessions in the sidebar after a turn ends. */
   private refreshSidebar(): void {
     clearTimeout(this.sidebarTimer)
-    this.sidebarTimer = setTimeout(() => { void this.sessionRows().then(rows => this.post({ type: 'sessions', rows }), () => {}) }, 1500)
+    this.sidebarTimer = setTimeout(() => { void this.sessionRows().then(rows => this.post({ type: 'sessions', rows }), () => {}) }, 600)
   }
 
   /**
