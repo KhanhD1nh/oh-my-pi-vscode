@@ -2,7 +2,7 @@
   "name": "oh-my-pi",
   "displayName": "Oh My Pi",
   "description": "Chat with the omp coding agent inside VS Code: streaming replies, tool cards, diffs, model picker and every omp setting.",
-  "version": "0.19.0",
+  "version": "0.20.0",
   "publisher": "khanhd1nh",
   "license": "MIT",
   "repository": {
@@ -65,6 +65,10 @@
       {
         "command": "ohMyPi.addSelection",
         "title": "Oh My Pi: Add Selection to Chat"
+      },
+      {
+        "command": "ohMyPi.checkForUpdates",
+        "title": "OMP: Check for Updates"
       }
     ],
     "menus": {
@@ -130,6 +134,11 @@
           "type": "boolean",
           "default": true,
           "description": "Show a notification when a chat finishes while its tab is not in front."
+        },
+        "ohMyPi.autoUpdate": {
+          "type": "boolean",
+          "default": true,
+          "description": "Check GitHub Releases once a day and offer to install a newer OMP extension."
         }
       }
     }

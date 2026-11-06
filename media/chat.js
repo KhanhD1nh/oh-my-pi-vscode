@@ -1,3 +1,5 @@
+// Generated from webview/*.js by build.mjs — edit those files, not this one.
+// Webview bootstrap: VS Code API, DOM helper h(), SVG icons.
 // Oh My Pi webview — Claude Code–style chat. Plain DOM, incremental updates (no full re-render on stream).
 // eslint-disable-next-line no-undef
 const vscode = acquireVsCodeApi()
@@ -22,6 +24,8 @@ const ICON = {
   back: '<path d="M10 3L5 8l5 5"/>', chevron: '<path d="M4 6l4 4 4-4"/>', brain: '<path d="M6 3.5a2 2 0 0 0-3 1.7 2 2 0 0 0 0 3.6A2 2 0 0 0 6 12.5V3.5zM10 3.5a2 2 0 0 1 3 1.7 2 2 0 0 1 0 3.6 2 2 0 0 1-3 3.7V3.5z"/>',
   image: '<rect x="2" y="3" width="12" height="10" rx="1.5"/><circle cx="6" cy="6.5" r="1"/><path d="M14 11l-3.5-3.5L4 13"/>',
 }
+
+// Markdown → HTML for messages (code fences get a copy button).
 // ───────────── markdown ─────────────
 const esc = s => s.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]))
 const inline = s => esc(s)
@@ -56,6 +60,7 @@ function md(src) {
   return out.join('')
 }
 
+// Tool cards: verbs, diffs, subagent (task) cards, background jobs.
 // ───────────── tools ─────────────
 const VERB = { read: 'Read', edit: 'Update', delete: 'Delete', move: 'Move', search: 'Search', execute: 'Bash', think: 'Think', fetch: 'Fetch', other: 'Tool' }
 const shortPath = p => { const parts = p.replace(/\\/g, '/').split('/'); return parts.slice(-3).join('/') }
@@ -160,6 +165,7 @@ function toolEl(c, key) {
 }
 
 
+// Webview state (S) and per-tab accessors.
 // ───────────── state ─────────────
 /** 'panel' = one chat in an editor tab; 'sidebar' = history + settings. */
 const MODE = document.body.dataset.mode ?? 'panel'
@@ -173,6 +179,7 @@ const S = {
 const tab = () => S.tabs.find(t => t.id === S.active) ?? { busy: false, queued: 0, thinkingLevels: [], modes: [], commands: [], usage: {} }
 const items = () => S.transcripts[S.active] ?? []
 
+// Transcript nodes: incremental upsert, timeline steps, working line.
 // ───────────── chat items (incremental) ─────────────
 let transcriptEl = null
 const nodes = new Map()
@@ -235,6 +242,7 @@ function renderWorking() {
   if (t.busy) { transcriptEl.append(h('div', { class: 'working' }, h('span', { class: 'work-ico' }, h('span', { class: 'tab-spin' }, SPIN[spinAt])), h('span', { class: 'working-label shimmer' }), t.queued ? h('span', { class: 'muted' }, ` · ${t.queued} queued`) : null)); updateWorking() }
 }
 
+// Chat view, composer, menus (model, mode, add, slash, files), history / sidebar.
 // ───────────── views ─────────────
 const app = document.getElementById('app')
 const folderName = p => p.replace(/\\/g, '/').split('/').filter(Boolean).pop() ?? p
@@ -578,6 +586,7 @@ function relDay(d) {
   return d.toLocaleDateString()
 }
 
+// Settings view: omp config with choice controls.
 // ───────────── settings ─────────────
 const GROUPS = [['model', 'Models'], ['providers', 'Providers'], ['interaction', 'Interaction'], ['context', 'Context'], ['memory', 'Memory'], ['tools', 'Tools'], ['tasks', 'Tasks'], ['files', 'Files'], ['shell', 'Shell'], ['appearance', 'Appearance'], ['internal', 'Advanced']]
 const isModelKey = k => k === 'modelRoles' || k === 'retry.fallbackChains' || /(^|\.)(model|smolModel|slowModel|planModel)$/.test(k)
@@ -680,6 +689,7 @@ function settingsView() {
   return [backbar('Settings'), body]
 }
 
+// render(), global click handling, host → webview messages.
 // ───────────── render / wiring ─────────────
 function render() {
   saveDraft()
@@ -771,6 +781,7 @@ window.addEventListener('message', ({ data: m }) => {
 })
 
 
+// Tab icon, fork/rewind menu, spinner, plan approval and ask forms, images.
 /** Tab icon: π; while running, 3 dots orbit in a small circle to its right. */
 function piIcon(t) {
   const pi = svg('<path fill="currentColor" stroke="none" transform="scale(.6667)" d="M3 6.5C3 5.1 4.1 4 5.5 4H20a1.5 1.5 0 0 1 0 3h-3v8.5c0 .6.4 1 1 1 .4 0 .7-.2 1-.4a1.4 1.4 0 0 1 2 2c-.8.8-1.9 1.3-3 1.3-2.3 0-4-1.6-4-3.9V7H10v12.5a1.5 1.5 0 0 1-3 0V7h-1.5c-.8 0-1.5.7-1.5 1.5a1.5 1.5 0 0 1-3 0v-2Z"/>')
@@ -866,6 +877,7 @@ function lightbox(src) {
   document.body.append(box)
 }
 
+// Status line, subagent/background activity chip, live subagent steps, copy helper.
 // ───────────── status line (like omp CLI) ─────────────
 /** Per-tab output stats: chars streamed this turn and when the turn's first chunk arrived. */
 const STAT = {}
@@ -950,6 +962,7 @@ function toggleAgent(k, toolId, name, cardKey) {
 function copyBtn(text) { const b = h('button', { class: 'copy', title: 'Copy' }, 'Copy'); b.dataset.text = text ?? ''; return b }
 
 
+// Todo bar and lists, in-chat permission cards.
 // ───────────── todo (omp `todo` tool) ─────────────
 /** Latest todo list in this chat, from the newest todo tool result. */
 function latestTodo() {
@@ -1003,6 +1016,7 @@ document.addEventListener('keydown', e => {
 })
 
 
+// Drag & drop, find in chat, Markdown export.
 // ───────────── drag & drop ─────────────
 // Images become attachments; files dragged from the VS Code explorer or the OS become @mentions.
 // Shift must be held while dropping into a webview in VS Code (editor drop rule), so the hint says so.
@@ -1079,6 +1093,7 @@ function chatMarkdown() {
   return out.join('\n')
 }
 
+// Boot: must run after every declaration above.
 // boot last: every const above must exist before the first render
 render()
 send({ type: 'ready' })

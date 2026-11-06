@@ -9,6 +9,7 @@ import { OmpHost, type OmpSession } from './agent.ts'
 import { resolveOmp } from './binary.ts'
 import { OmpConfigCli } from './settings.ts'
 import { agentSteps, sessionStats } from './stats.ts'
+import { checkForUpdate } from './update.ts'
 import type { AgentModelChoice, AgentSetting, HostMessage, TabState, WebviewMessage } from './types.ts'
 
 const DIFF_SCHEME = 'oh-my-pi-diff'
@@ -39,10 +40,14 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand('ohMyPi.settings', () => provider.showView('settings')),
     vscode.commands.registerCommand('ohMyPi.focus', () => provider.focusChat()),
     vscode.commands.registerCommand('ohMyPi.addSelection', () => provider.addSelection()),
+    vscode.commands.registerCommand('ohMyPi.checkForUpdates', () => checkForUpdate(context, output, true)),
     vscode.window.onDidChangeActiveTextEditor(() => provider.folderMaybeChanged()),
     vscode.workspace.onDidChangeWorkspaceFolders(() => provider.folderMaybeChanged()),
     { dispose: () => provider.dispose() },
   )
+  // Daily, a minute after startup so it never slows activation.
+  const t = setTimeout(() => { void checkForUpdate(context, output) }, 60_000)
+  context.subscriptions.push({ dispose: () => clearTimeout(t) })
 }
 
 export function deactivate(): void {}

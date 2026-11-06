@@ -6,3 +6,6 @@ tsconfig.json
 *.vsix
 .npmrc
 **/*.map
+release.mjs
+docs/**
+webview/**
