@@ -11,6 +11,9 @@ import { OmpConfigCli } from './settings.ts'
 import type { AgentModelChoice, AgentSetting, HostMessage, TabState, WebviewMessage } from './types.ts'
 
 const DIFF_SCHEME = 'oh-my-pi-diff'
+/** omp's global tool-approval setting, shown as the composer's Mode menu. */
+const APPROVAL_KEY = 'tools.approvalMode'
+const APPROVAL_MODES = ['always-ask', 'always-ask-cached', 'write', 'yolo'] as const
 
 export function activate(context: vscode.ExtensionContext): void {
   const output = vscode.window.createOutputChannel('Oh My Pi')
@@ -176,6 +179,7 @@ class ChatViewProvider implements vscode.WebviewViewProvider {
       switch (m.type) {
         case 'ready': {
           void this.loadModels()
+          void this.cli.get(APPROVAL_KEY).then(value => this.post({ type: 'approval', value }), () => {})
           if (this.tabs.length === 0) await this.newTab()
           else { this.postTabs(); if (this.active) this.activate(this.active) }
           return
@@ -218,6 +222,11 @@ class ChatViewProvider implements vscode.WebviewViewProvider {
           this.activate(session.id)
           return
         }
+        case 'setApproval':
+          await this.cli.set({ key: APPROVAL_KEY, type: 'enum', options: [...APPROVAL_MODES] }, m.value)
+          this.post({ type: 'approval', value: m.value })
+          return
+        case 'addSelection': this.addSelection(); return
         case 'answer': this.tab(m.tab)?.session.answer(m.itemId, m.action, m.content); return
         case 'rewind': await this.rewind(m.tab, m.itemId); return
         case 'loadSettings': await this.refreshSettings(); return

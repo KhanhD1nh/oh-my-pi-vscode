@@ -84,6 +84,7 @@ export type HostMessage =
   | { type: 'view'; view: 'chat' | 'history' | 'settings' }
   | { type: 'insert'; text: string }
   | { type: 'files'; query: string; files: string[] }
+  | { type: 'approval'; value: string }
 
 /** Webview → host messages. */
 export type WebviewMessage =
@@ -105,5 +106,7 @@ export type WebviewMessage =
   | { type: 'resetSetting'; key: string }
   | { type: 'findFiles'; query: string }
   | { type: 'fork'; tab: string }
+  | { type: 'setApproval'; value: string }
+  | { type: 'addSelection' }
   | { type: 'answer'; tab: string; itemId: string; action: 'accept' | 'decline' | 'cancel'; content?: Record<string, AskValue> }
   | { type: 'rewind'; tab: string; itemId: string }

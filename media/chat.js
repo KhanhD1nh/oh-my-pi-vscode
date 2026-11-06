@@ -200,16 +200,62 @@ function chatView() {
 
 function modelName(sel) { return S.models.find(m => m.selector === sel)?.name ?? (sel ? sel.split('/').pop() : 'Model') }
 
+const MI = {
+  hand: '<path d="M5.5 8V3.8a1 1 0 0 1 2 0V7.5M7.5 7.5V2.8a1 1 0 0 1 2 0v4.7M9.5 7.5V3.8a1 1 0 0 1 2 0V9M11.5 7a1 1 0 0 1 2 0v3a4 4 0 0 1-4 4h-1a4 4 0 0 1-3.3-1.7L3.3 9.8a1 1 0 0 1 1.6-1.2l.6.8"/>',
+  shield: '<path d="M8 1.8l5 2v4c0 3-2.2 5.3-5 6.2-2.8-.9-5-3.2-5-6.2v-4z"/><path d="M5.8 8l1.6 1.6 2.9-3"/>',
+  code: '<path d="M5.5 4.5 2 8l3.5 3.5M10.5 4.5 14 8l-3.5 3.5"/>',
+  bolt: '<path d="M9 1.5 3.5 9H8l-1 5.5L12.5 7H8z"/>',
+  plan: '<path d="M4 2.5h5.5L12 5v8.5H4z"/><path d="M6 7.5h4M6 10h4"/>',
+  slash: '<rect x="2.5" y="2.5" width="11" height="11" rx="2"/><path d="M9.5 5 6.5 11"/>',
+}
+/** omp tools.approvalMode values, in Shift+Tab order. */
+const APPROVAL = [
+  { id: 'always-ask', name: 'Manual', desc: 'omp asks before every tool call', icon: MI.hand },
+  { id: 'always-ask-cached', name: 'Ask once', desc: 'Asks the first time, remembers your answer', icon: MI.shield },
+  { id: 'write', name: 'Ask for writes', desc: 'Reads run freely; asks before writing', icon: MI.code },
+  { id: 'yolo', name: 'Auto', desc: 'Runs every tool without asking', icon: MI.bolt },
+]
+const cap = s => s ? s[0].toUpperCase() + s.slice(1) : s
+function setApproval(id) {
+  if (tab().mode === 'plan') send({ type: 'setMode', tab: S.active, value: 'default' })
+  S.approval = id; send({ type: 'setApproval', value: id })
+}
+/** Shift+Tab: next approval mode, then Plan, then back to the first. */
+function cycleMode() {
+  const t = tab(); const hasPlan = t.modes.some(m => m.id === 'plan')
+  const i = t.mode === 'plan' ? APPROVAL.length : APPROVAL.findIndex(x => x.id === S.approval)
+  const next = (i + 1) % (APPROVAL.length + (hasPlan ? 1 : 0))
+  if (next === APPROVAL.length) send({ type: 'setMode', tab: S.active, value: 'plan' }); else setApproval(APPROVAL[next].id)
+  refreshComposer()
+}
+function pickImage() {
+  const inp = h('input', { type: 'file', accept: 'image/*', multiple: true, style: 'display:none', onchange: () => {
+    for (const f of inp.files ?? []) { const r = new FileReader(); r.onload = () => { S.images.push({ mimeType: f.type, data: String(r.result).split(',')[1], url: r.result }); refreshComposer() }; r.readAsDataURL(f) }
+    inp.remove()
+  } })
+  document.body.append(inp); inp.click()
+}
+function insertAtEnd(ch) { const x = document.getElementById('input'); x.value += (x.value && !/\s$/.test(x.value) ? ' ' : '') + ch; x.focus(); x.setSelectionRange(x.value.length, x.value.length); updateInlineMenus(x); syncAction() }
+/** One button: Stop while omp works and the box is empty, otherwise Send (queues while busy). */
+function syncAction() {
+  const b = document.getElementById('action'); const x = document.getElementById('input'); if (!b || !x) return
+  const t = tab(); const stop = t.busy && !x.value.trim() && !S.images.length
+  b.className = `send${stop ? ' stop' : ''}`
+  b.title = stop ? 'Stop (Esc)' : t.busy ? 'Queue message (Enter)' : 'Send (Enter)'
+  b.replaceChildren(svg(stop ? ICON.stop : ICON.up))
+}
+
 function composer() {
   const t = tab()
   const ta = h('textarea', {
-    id: 'input', rows: 1, placeholder: t.busy ? 'Message will be queued · Esc to stop' : 'Ask omp anything · @ to add files · / for commands',
+    id: 'input', rows: 1, placeholder: t.busy ? 'Queue another message…' : 'Ask omp anything · @ files · / commands',
     onkeydown: e => {
       if ((S.menu === 'slash' || S.menu === 'files') && ['ArrowDown', 'ArrowUp', 'Enter', 'Tab'].includes(e.key)) return menuKey(e)
+      if (e.key === 'Tab' && e.shiftKey) { e.preventDefault(); cycleMode(); return }
       if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); submit() }
       if (e.key === 'Escape') { if (S.menu) closeMenu(); else if (t.busy) send({ type: 'cancel', tab: S.active }) }
     },
-    oninput: () => { autosize(ta); updateInlineMenus(ta) },
+    oninput: () => { autosize(ta); updateInlineMenus(ta); syncAction() },
     onpaste: e => {
       for (const f of e.clipboardData?.files ?? []) if (f.type.startsWith('image/')) {
         e.preventDefault()
@@ -218,21 +264,21 @@ function composer() {
     },
   })
   const plan = t.mode === 'plan'
+  const ap = APPROVAL.find(x => x.id === S.approval)
   const pct = t.usage?.size ? Math.round((t.usage.used ?? 0) / t.usage.size * 100) : null
   const box = h('div', { class: 'composer', id: 'composer' },
     S.images.length ? h('div', { class: 'attachments' }, S.images.map((img, i) => h('span', { class: 'attach' }, h('img', { src: img.url }), h('button', { onclick: () => { S.images.splice(i, 1); refreshComposer() } }, '×')))) : null,
     ta,
     h('div', { class: 'composer-bar' },
-      t.modes.length > 1 ? h('button', { class: `chip-btn${plan ? ' plan' : ''}`, title: 'Plan mode (read-only planning)', onclick: () => send({ type: 'setMode', tab: S.active, value: plan ? 'default' : 'plan' }) }, plan ? '⏸ Plan mode' : 'Plan') : null,
-      h('button', { class: `chip-btn${S.menu === 'model' ? ' open' : ''}`, onclick: () => openMenu('model') }, h('span', { class: 'label' }, modelName(t.model)), svg(ICON.chevron)),
-      t.thinkingLevels.length ? h('button', { class: `chip-btn${S.menu === 'thinking' ? ' open' : ''}`, onclick: () => openMenu('thinking') }, svg(ICON.brain), h('span', { class: 'label' }, t.thinking ?? 'auto')) : null,
-      h('button', { class: 'chip-btn', title: 'Add file (@)', onclick: () => { const x = document.getElementById('input'); x.value += (x.value && !/\s$/.test(x.value) ? ' ' : '') + '@'; x.focus(); updateInlineMenus(x) } }, '@'),
-      h('span', { class: 'grow' }),
+      h('button', { class: `chip-btn icon${S.menu === 'add' ? ' open' : ''}`, title: 'Add', onclick: () => openMenu('add') }, svg(ICON.plus)),
+      t.commands.length ? h('button', { class: 'chip-btn icon', title: 'Commands (/)', onclick: () => { const x = document.getElementById('input'); if (!x.value.startsWith('/')) { x.value = '/'; } x.focus(); updateInlineMenus(x); syncAction() } }, svg(MI.slash)) : null,
+      h('button', { class: `chip-btn model${S.menu === 'model' ? ' open' : ''}`, title: 'Model', onclick: () => openMenu('model') }, h('span', { class: 'label' }, modelName(t.model)), t.thinking ? h('span', { class: 'sub' }, cap(t.thinking)) : null),
       pct !== null ? h('span', { class: 'ctx', title: `${t.usage.used} / ${t.usage.size} tokens${t.usage.cost ? ` · $${t.usage.cost.toFixed(4)}` : ''}` }, `${pct}%`) : null,
-      t.busy ? h('button', { class: 'send stop', title: 'Stop (Esc)', onclick: () => send({ type: 'cancel', tab: S.active }) }, svg(ICON.stop)) : null,
-      h('button', { class: 'send', title: t.busy ? 'Queue message (Enter)' : 'Send (Enter)', onclick: submit }, svg(ICON.up))),
+      h('span', { class: 'grow' }),
+      h('button', { class: `chip-btn${S.menu === 'mode' ? ' open' : ''}${plan ? ' plan' : ''}`, title: 'Mode (Shift+Tab)', onclick: () => openMenu('mode') }, svg(plan ? MI.plan : ap?.icon ?? MI.bolt), h('span', { class: 'label' }, plan ? 'Plan' : ap?.name ?? 'Mode')),
+      h('button', { id: 'action', class: 'send', onclick: () => { const x = document.getElementById('input'); if (tab().busy && !x.value.trim() && !S.images.length) send({ type: 'cancel', tab: S.active }); else submit() } }, svg(ICON.up))),
     menuEl())
-  queueMicrotask(() => autosize(ta))
+  queueMicrotask(() => { autosize(ta); syncAction() })
   return box
 }
 function autosize(ta) { ta.style.height = 'auto'; ta.style.height = Math.min(240, ta.scrollHeight) + 'px' }
@@ -257,6 +303,23 @@ function menuEl() {
     return h('div', { class: 'menu', style: 'left:6px' }, filter,
       !S.models.length ? h('div', { class: 'menu-group' }, 'Loading models…') : null,
       Object.entries(by).map(([p, list]) => [h('div', { class: 'menu-group' }, p), list.slice(0, 60).map(m => h('button', { class: `menu-item${m.selector === t.model ? ' active' : ''}`, onclick: () => { send({ type: 'setModel', tab: S.active, value: m.selector }); t.model = m.selector; S.modelQuery = ''; closeMenu() } }, h('span', { class: 'check' }, m.selector === t.model ? '✓' : ''), m.name))]))
+  }
+  if (S.menu === 'add') {
+    return h('div', { class: 'menu', style: 'left:6px;min-width:210px' },
+      h('button', { class: 'menu-item', onclick: () => { closeMenu(); pickImage() } }, svg(ICON.image), 'Upload image'),
+      h('button', { class: 'menu-item', onclick: () => { closeMenu(); insertAtEnd('@') } }, h('span', { class: 'mi-ico' }, '@'), 'Mention a file'),
+      h('button', { class: 'menu-item', onclick: () => { closeMenu(); send({ type: 'addSelection' }) } }, svg(MI.code), 'Add editor selection'))
+  }
+  if (S.menu === 'mode') {
+    const plan = t.mode === 'plan'
+    const lv = t.thinkingLevels; const cur = lv.indexOf(t.thinking ?? '')
+    const row = (on, icon, name, desc, onclick) => h('button', { class: `menu-item mode${on ? ' active' : ''}`, onclick }, svg(icon), h('span', { class: 'mi-text' }, h('b', {}, name), h('small', {}, desc)), h('span', { class: 'check' }, on ? '✓' : ''))
+    return h('div', { class: 'menu modes' },
+      h('div', { class: 'menu-group row' }, h('span', {}, 'Modes'), h('span', { class: 'kbd' }, '⇧ + Tab to switch')),
+      APPROVAL.map(x => row(!plan && x.id === S.approval, x.icon, x.name, x.desc, () => { setApproval(x.id); closeMenu() })),
+      t.modes.some(m => m.id === 'plan') ? row(plan, MI.plan, 'Plan', 'Explores the code and presents a plan before editing', () => { send({ type: 'setMode', tab: S.active, value: plan ? 'default' : 'plan' }); closeMenu() }) : null,
+      lv.length ? [h('div', { class: 'menu-sep' }), h('div', { class: 'effort' }, svg(ICON.brain), h('span', {}, `Effort (${cap(t.thinking ?? 'auto')})`), h('span', { class: 'grow' }),
+        h('span', { class: 'dots' }, lv.map((l, i) => h('button', { class: `dot${i <= cur ? ' on' : ''}${i === cur ? ' cur' : ''}`, title: cap(l), onclick: e => { e.stopPropagation(); send({ type: 'setThinking', tab: S.active, value: l }); t.thinking = l; refreshComposer() } }))))] : null)
   }
   if (S.menu === 'thinking') {
     return h('div', { class: 'menu', style: 'left:60px;min-width:160px' }, h('div', { class: 'menu-group' }, 'Thinking'),
@@ -502,6 +565,7 @@ window.addEventListener('message', ({ data: m }) => {
       if (firstLoad || m.status !== 'ready') render(); else renderSettingsList()
       return
     }
+    case 'approval': S.approval = m.value; if (S.view === 'chat') refreshComposer(); return
     case 'view': go(m.view); return
     case 'insert': {
       if (S.view !== 'chat') go('chat')

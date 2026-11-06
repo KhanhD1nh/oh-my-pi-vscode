@@ -120,6 +120,11 @@ export class OmpConfigCli {
     await run(exe, ['config', 'set', setting.key, encodeValue(setting, value)])
   }
 
+  async get(key: string): Promise<string> {
+    const exe = await this.command()
+    return (await run(exe, ['config', 'get', key])).trim()
+  }
+
   async reset(key: string): Promise<void> {
     const exe = await this.command()
     await run(exe, ['config', 'reset', key])

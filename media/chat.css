@@ -310,3 +310,31 @@ svg.tab-ico.unread { color: #bd93f9; }
 .ask-skip { color: var(--muted); padding: 4px 10px; border-radius: var(--radius-sm); }
 .ask-skip:hover { background: var(--soft); }
 .ask-ans { font-size: 0.93em; }
+
+/* ── composer bar, Claude Code layout ── */
+.composer-bar { gap: 4px; padding: 4px 6px 6px; }
+.chip-btn.icon { width: 26px; padding: 0; justify-content: center; }
+.chip-btn.icon svg { width: 15px; height: 15px; }
+.chip-btn.model { background: var(--soft); color: var(--vscode-foreground); }
+.chip-btn .sub { color: var(--muted); }
+.composer-bar .send { width: 26px; height: 26px; border-radius: 7px; }
+.composer-bar .send.stop { background: var(--vscode-errorForeground); color: #fff; }
+.menu-item svg { width: 15px; height: 15px; flex: none; }
+.mi-ico { width: 15px; text-align: center; font-weight: 600; flex: none; }
+.menu.modes { left: auto; right: 6px; width: min(310px, calc(100vw - 24px)); }
+.menu-group.row { display: flex; justify-content: space-between; align-items: center; text-transform: none; letter-spacing: 0; font-size: 0.85em; }
+.kbd { font-size: 0.92em; color: var(--muted); }
+.menu-item.mode { align-items: flex-start; padding: 7px 8px; }
+.menu-item.mode svg { width: 17px; height: 17px; margin-top: 2px; }
+.mi-text { display: flex; flex-direction: column; flex: 1; min-width: 0; }
+.mi-text b { font-weight: 500; }
+.mi-text small { color: var(--muted); font-size: 0.86em; }
+.menu-item.mode .check { margin-left: auto; }
+.menu-sep { height: 1px; background: var(--line); margin: 4px 0; }
+.effort { display: flex; align-items: center; gap: 8px; padding: 6px 8px; }
+.effort svg { width: 16px; height: 16px; flex: none; }
+.dots { display: inline-flex; align-items: center; gap: 7px; padding: 4px 8px; border-radius: 10px; background: var(--soft); }
+.dot { width: 6px; height: 6px; border-radius: 50%; background: var(--muted); padding: 0; opacity: .6; }
+.dot.on { background: var(--vscode-focusBorder); opacity: 1; }
+.dot.cur { width: 13px; height: 13px; background: var(--vscode-button-foreground); box-shadow: 0 0 0 3px var(--vscode-focusBorder); }
+.menu.modes { max-height: min(560px, 80vh); }
