@@ -46,6 +46,13 @@ export function toolDiff(update: Update): ToolCard['diff'] | undefined {
 /** Transcript state with the folding rules. */
 export class Transcript {
   readonly items: ChatItem[] = []
+
+  /** Drop item `id` and everything after it (the session moved back to before that prompt). */
+  truncateAt(id: string): void {
+    const i = this.items.findIndex(x => x.id === id)
+    if (i < 0) return
+    for (const it of this.items.splice(i)) if (it.type === 'tool') this.tools.delete(it.card.id)
+  }
   private seq = 0
   private readonly tools = new Map<string, ToolCard>()
 

@@ -83,8 +83,9 @@ window.addEventListener('message', ({ data: m }) => {
       if (S.view !== 'chat') go('chat')
       const ta = document.getElementById('input')
       // Dropped @mentions continue the line; added selections start a new one.
-      const sep = !ta.value ? '' : m.inline ? (/\s$/.test(ta.value) ? '' : ' ') : '\n'
-      ta.value = ta.value + sep + m.text; autosize(ta); syncAction(); ta.focus()
+      if (m.replace) { ta.value = m.text; S.images = (m.images ?? []).map(i => ({ ...i, url: `data:${i.mimeType};base64,${i.data}` })); refreshComposer() }
+      else { const sep = !ta.value ? '' : m.inline ? (/\s$/.test(ta.value) ? '' : ' ') : '\n'; ta.value = ta.value + sep + m.text }
+      const input = document.getElementById('input'); autosize(input); syncAction(); input.focus(); input.setSelectionRange(input.value.length, input.value.length)
     }
   }
 })

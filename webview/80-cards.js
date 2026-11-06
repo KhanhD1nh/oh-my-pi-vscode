@@ -14,8 +14,11 @@ function userActions(it) {
   const btn = h('button', { class: 'icon-btn ua-btn', title: 'Fork / rewind', onclick: e => { e.stopPropagation(); S.userMenu = open ? null : it.id; upsertNode(it) } }, svg('<path d="M5 3 2 6l3 3"/><path d="M2 6h7a4 4 0 0 1 0 8H6"/>'))
   const pick = msg => { S.userMenu = null; upsertNode(it); send(msg) }
   return h('div', { class: 'ua' }, btn, open ? h('div', { class: 'ua-menu' },
-    h('button', { class: 'menu-item', onclick: () => pick({ type: 'fork', tab: S.active }) }, 'Fork conversation'),
-    h('button', { class: 'menu-item', onclick: () => pick({ type: 'rewind', tab: S.active, itemId: it.id }) }, 'Rewind code to here')) : null)
+    h('button', { class: 'menu-item', title: 'Go back to before this message in this tab and put it in the input to edit', onclick: () => pick({ type: 'editFrom', tab: S.active, itemId: it.id }) }, 'Fork conversation from here'),
+    h('button', { class: 'menu-item', title: 'Undo file edits omp made after this message', onclick: () => pick({ type: 'rewind', tab: S.active, itemId: it.id }) }, 'Rewind code to here'),
+    h('button', { class: 'menu-item', title: 'Both: undo the file edits and go back to this message', onclick: () => pick({ type: 'editFrom', tab: S.active, itemId: it.id, rewindCode: true }) }, 'Fork conversation and rewind code'),
+    h('div', { class: 'menu-sep' }),
+    h('button', { class: 'menu-item', title: 'Copy the whole chat so far into a new tab', onclick: () => pick({ type: 'fork', tab: S.active }) }, 'Duplicate chat in new tab')) : null)
 }
 document.addEventListener('click', e => { if (S.userMenu && !e.target.closest('.ua')) { const it = items().find(x => x.id === S.userMenu); S.userMenu = null; if (it) upsertNode(it) } })
 

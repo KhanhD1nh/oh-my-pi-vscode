@@ -59,3 +59,12 @@ test('permission items are appended with their options', () => {
   assert.equal(it.type, 'permission')
   assert.equal(t.items.length, 1)
 })
+
+test('truncateAt drops the prompt and everything after it', () => {
+  const t = new Transcript()
+  t.user('one'); const two = t.user('two')
+  t.apply({ sessionUpdate: 'tool_call', toolCallId: 'k', name: 'read', title: 'Read', status: 'completed' })
+  t.truncateAt(two.id)
+  assert.deepEqual(t.items.map(i => i.type === 'user' ? i.text : i.type), ['one'])
+  assert.equal(t.card('k'), undefined)
+})

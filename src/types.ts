@@ -119,7 +119,7 @@ export type HostMessage =
   | { type: 'sessions'; rows: SessionRow[] }
   | { type: 'settings'; status: 'loading' | 'ready' | 'error'; error?: string; settings: AgentSetting[]; models: AgentModelChoice[]; saving?: string; failed?: Record<string, string> }
   | { type: 'view'; view: 'chat' | 'history' | 'settings' }
-  | { type: 'insert'; text: string; inline?: boolean }
+  | { type: 'insert'; text: string; inline?: boolean; replace?: boolean; images?: { mimeType: string; data: string }[] }
   | { type: 'files'; query: string; files: string[] }
   | { type: 'approval'; value: string }
   | { type: 'agentSteps'; toolId: string; name: string; steps: { tool?: string; label: string; status: 'running' | 'done' | 'failed' }[]; model?: string; cost: number }
@@ -144,6 +144,7 @@ export type WebviewMessage =
   | { type: 'resetSetting'; key: string }
   | { type: 'findFiles'; query: string }
   | { type: 'fork'; tab: string }
+  | { type: 'editFrom'; tab: string; itemId: string; rewindCode?: boolean }
   | { type: 'setApproval'; value: string }
   | { type: 'agentSteps'; tab: string; toolId: string; name: string }
   | { type: 'addSelection' }

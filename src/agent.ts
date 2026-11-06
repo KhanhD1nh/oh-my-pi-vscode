@@ -164,6 +164,25 @@ export class OmpSession {
   private asks = new Map<string, (r: { action: 'accept' | 'decline' | 'cancel'; content?: Record<string, AskValue> }) => void>()
 
   /** @internal omp asked the user something; resolves when the form is answered. */
+/**
+   * Move omp back to just before your prompt `itemId` (via the `/vsc-rewind` omp extension) and drop it and
+   * everything after from this tab. Later turns stay in omp's session tree as an old branch.
+   * @returns the prompt's text and images, to put back in the input.
+   */
+  async rewindTo(itemId: string): Promise<{ text: string; images: { mimeType: string; data: string }[] }> {
+    const items = this.transcript.items
+    const target = items.find(i => i.id === itemId)
+    if (target?.type !== 'user') throw new Error('Not a prompt in this chat.')
+    const n = items.filter(i => i.type === 'user').indexOf(target) + 1
+    this.renaming = true // swallow the command's own notice
+    try {
+      await this.host.rpc().request(methods.agent.session.prompt, { sessionId: this.id, prompt: [{ type: 'text', text: `/vsc-rewind ${n}` }] })
+    } finally { this.renaming = false }
+    this.transcript.truncateAt(itemId)
+    this.events.reset(this)
+    return { text: target.text, images: target.images ?? [] }
+  }
+
   private permits = new Map<string, (optionId: string | undefined) => void>()
 
   /** @internal omp needs consent for a tool; resolves with the chosen option (undefined = cancel). */

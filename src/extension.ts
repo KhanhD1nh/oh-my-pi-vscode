@@ -347,6 +347,20 @@ class ChatViewProvider implements vscode.WebviewViewProvider {
           } else this.activate(m.sessionId)
           return
         }
+        case 'editFrom': {
+          const t = this.tab(m.tab)
+          if (t === undefined) return
+          if (t.session.busy) {
+            const pick = await vscode.window.showWarningMessage('omp is still working in this chat. Stop it and go back to this message?', { modal: true }, 'Stop and go back')
+            if (pick !== 'Stop and go back') return
+            t.session.cancel()
+            for (let i = 0; i < 50 && t.session.busy; i++) await new Promise(r => setTimeout(r, 100))
+          }
+          if (m.rewindCode) await this.rewind(m.tab, m.itemId, true)
+          const prompt = await t.session.rewindTo(m.itemId)
+          this.postTab(m.tab, { type: 'insert', text: prompt.text, replace: true, images: prompt.images })
+          return
+        }
         case 'fork': {
           const t = this.tab(m.tab)
           if (t === undefined) return
@@ -483,13 +497,13 @@ class ChatViewProvider implements vscode.WebviewViewProvider {
    * Undo file edits omp made after the user message `itemId`, newest first, by reversing each recorded diff.
    * ponytail: only edits seen as diffs are reverted (not bash side effects); a hunk that no longer matches is skipped and reported.
    */
-  private async rewind(tabId: string, itemId: string): Promise<void> {
+  private async rewind(tabId: string, itemId: string, quiet = false): Promise<void> {
     const t = this.tab(tabId)
     if (t === undefined) return
     const items = t.session.transcript.items
     const from = items.findIndex(i => i.id === itemId)
     const edits = items.slice(from + 1).flatMap(i => i.type === 'tool' && i.card.diff ? [i.card.diff] : []).reverse()
-    if (from < 0 || edits.length === 0) { void vscode.window.showInformationMessage('Oh My Pi: no file edits after this message.'); return }
+    if (from < 0 || edits.length === 0) { if (!quiet) void vscode.window.showInformationMessage('OMP: no file edits after this message.'); return }
     const files = [...new Set(edits.map(e => vscode.workspace.asRelativePath(e.path)))]
     const ok = await vscode.window.showWarningMessage(`Revert ${edits.length} edit(s) in ${files.length} file(s) made after this message?`, { modal: true, detail: files.join('\n') }, 'Rewind')
     if (ok !== 'Rewind') return
