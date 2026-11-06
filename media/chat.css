@@ -283,3 +283,5 @@ svg.tab-ico { color: #bd93f9; opacity: .55; }
 svg.tab-ico.busy, svg.tab-ico.unread, .tabchip.on svg.tab-ico { opacity: 1; }
 svg.tab-orbit { color: #bd93f9; }
 svg.tab-ico.unread { color: #bd93f9; }
+
+.tab-spin { flex: none; width: 10px; color: #bd93f9; font-family: var(--vscode-editor-font-family); font-size: 13px; line-height: 1; text-align: center; }
