@@ -59,7 +59,24 @@ export interface AskSchema {
 }
 
 /** Session row in history. */
-export interface SessionRow { sessionId: string; title?: string; cwd: string; updatedAt?: string }
+export interface SessionRow { sessionId: string; title?: string; cwd: string; updatedAt?: string; stats?: SessionStats }
+
+/** Totals read from an omp session file. */
+export interface SessionStats {
+  cost: number
+  input: number
+  output: number
+  cacheRead: number
+  /** Time spent waiting on the model, ms. */
+  apiMs: number
+  /** First to last event, ms. */
+  wallMs?: number
+  prompts: number
+  tools: number
+  added: number
+  removed: number
+  model?: string
+}
 
 /** One open tab (omp session) as the webview shows it. */
 export interface TabState {

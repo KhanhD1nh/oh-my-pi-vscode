@@ -431,18 +431,55 @@ function submit() {
 }
 
 // history
+const money = n => n >= 100 ? `$${n.toFixed(0)}` : `$${n.toFixed(2)}`
+const dur = ms => { if (!ms) return '0s'; const s = Math.round(ms / 1000), h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60); return h ? `${h}h ${m}m` : m ? `${m}m ${s % 60}s` : `${s}s` }
+const ago = iso => { const d = (Date.now() - Date.parse(iso)) / 1000; return d < 60 ? 'now' : d < 3600 ? `${Math.floor(d / 60)}m` : d < 86400 ? `${Math.floor(d / 3600)}h` : `${Math.floor(d / 86400)}d` }
+const cleanTitle = t => (t || 'Untitled session').replace(/^\S*\s*ESC:\s*/u, '').replace(/^[\p{Extended_Pictographic}\uFE0F\s]+/u, '')
+function collapsible(key, title, right, body) {
+  S.closed ??= new Set(['empty'])
+  const open = !S.closed.has(key)
+  return h('div', { class: 'sb-sec' },
+    h('button', { class: 'sb-head', onclick: () => { (S.closed ??= new Set()); open ? S.closed.add(key) : S.closed.delete(key); render() } }, h('span', { class: `chev${open ? ' open' : ''}` }, '›'), title, h('span', { class: 'grow' }), right),
+    open ? body : null)
+}
 function historyView() {
   const q = S.sessionQuery.toLowerCase()
   const open = new Set(S.tabs.map(t => t.id))
-  const rows = S.sessions.filter(s => !q || (s.title ?? '').toLowerCase().includes(q))
+  const busy = new Set(S.tabs.filter(t => t.busy).map(t => t.id))
+  const all = S.sessions
+  const sum = all.reduce((a, s) => { const x = s.stats; if (x) { a.cost += x.cost; a.api += x.apiMs; a.wall += x.wallMs ?? 0; a.add += x.added; a.del += x.removed; a.inp += x.input; a.out += x.output; a.prompts += x.prompts } return a }, { cost: 0, api: 0, wall: 0, add: 0, del: 0, inp: 0, out: 0, prompts: 0 })
+  const today = new Date(); today.setHours(0, 0, 0, 0)
+  const todayCost = all.filter(s => s.updatedAt && Date.parse(s.updatedAt) >= today.getTime()).reduce((n, s) => n + (s.stats?.cost ?? 0), 0)
+  const kv = (k, v) => h('div', { class: 'kv-row' }, h('span', {}, k), h('span', { class: 'v' }, v))
+  const usage = collapsible('usage', 'Usage', h('span', { class: 'muted small' }, folderName(S.cwd)), h('div', { class: 'sb-body' },
+    kv('Total cost', money(sum.cost)), kv('Today', money(todayCost)),
+    kv('Duration (API)', dur(sum.api)), kv('Duration (wall)', dur(sum.wall)),
+    kv('Tokens in / out', `${fmtTok(sum.inp)} / ${fmtTok(sum.out)}`),
+    kv('Prompts', String(sum.prompts)),
+    h('div', { class: 'kv-row col' }, h('span', {}, 'Code changes'), h('span', { class: 'v' }, h('span', { class: 'plus' }, `${sum.add.toLocaleString()} added`), ', ', h('span', { class: 'minus' }, `${sum.del.toLocaleString()} removed`)))))
+  const rows = all.filter(s => !q || cleanTitle(s.title).toLowerCase().includes(q) || (s.stats?.model ?? '').toLowerCase().includes(q))
+  const active = rows.filter(s => open.has(s.sessionId))
+  const empty = rows.filter(s => !open.has(s.sessionId) && s.stats && !s.stats.prompts)
+  const rest = rows.filter(s => !open.has(s.sessionId) && !empty.includes(s))
   const groups = {}
-  for (const s of rows) { const d = s.updatedAt ? new Date(s.updatedAt) : null; const key = d ? relDay(d) : 'Older'; (groups[key] ??= []).push(s) }
+  for (const s of rest) { const d = s.updatedAt ? new Date(s.updatedAt) : null; (groups[d ? relDay(d) : 'Older'] ??= []).push(s) }
+  const row = s => {
+    const x = s.stats
+    const meta = [x?.model ? x.model.split('/').pop() : '', x?.prompts ? `${x.prompts} prompt${x.prompts > 1 ? 's' : ''}` : '', x?.cost ? money(x.cost) : ''].filter(Boolean).join(' · ')
+    return h('button', { class: `session${open.has(s.sessionId) ? ' current' : ''}`, title: s.title ?? '', onclick: () => send({ type: 'loadSession', sessionId: s.sessionId }) },
+      h('div', { class: 'srow' }, open.has(s.sessionId) ? h('span', { class: `live${busy.has(s.sessionId) ? ' busy' : ''}` }) : null,
+        h('span', { class: 'session-title' }, cleanTitle(s.title)), h('span', { class: 'when' }, s.updatedAt ? ago(s.updatedAt) : '')),
+      meta || x?.added || x?.removed ? h('div', { class: 'session-meta' }, meta, x && (x.added || x.removed) ? h('span', { class: 'diffstat' }, h('span', { class: 'plus' }, `+${x.added}`), ' ', h('span', { class: 'minus' }, `-${x.removed}`)) : null) : null)
+  }
   const search = h('input', { type: 'search', class: 'search', placeholder: 'Search sessions…', value: S.sessionQuery, oninput: e => { S.sessionQuery = e.target.value; const p = e.target.selectionStart; render(); const f = document.querySelector('.search'); f.focus(); f.setSelectionRange(p, p) } })
-  return [backbar('History'), h('div', { class: 'page' }, search,
-    !S.sessions.length ? h('div', { class: 'muted', style: 'padding:10px' }, `No omp sessions in ${folderName(S.cwd)} yet.`) : null,
-    Object.entries(groups).map(([day, list]) => [h('div', { class: 'day' }, day), list.map(s => h('button', { class: `session${open.has(s.sessionId) ? ' current' : ''}`, onclick: () => send({ type: 'loadSession', sessionId: s.sessionId }) },
-      h('div', { class: 'session-title' }, (s.title || 'Untitled session').replace(/^\S*\s*ESC:\s*/, '')),
-      h('div', { class: 'session-meta' }, [s.updatedAt ? new Date(s.updatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '', open.has(s.sessionId) ? 'open in a tab' : ''].filter(Boolean).join(' · '))))]))]
+  const sessions = collapsible('sessions', 'Sessions', h('span', { class: 'count' }, String(all.length)), h('div', { class: 'sb-body' },
+    h('button', { class: 'sb-new', onclick: () => send({ type: 'newTab' }) }, svg(ICON.plus), 'New session'),
+    search,
+    !all.length ? h('div', { class: 'muted', style: 'padding:8px 4px' }, `No omp sessions in ${folderName(S.cwd)} yet.`) : null,
+    active.length ? [h('div', { class: 'day' }, h('span', {}, 'Active'), h('span', { class: 'count' }, String(active.length))), active.map(row)] : null,
+    Object.entries(groups).map(([day, list]) => [h('div', { class: 'day' }, h('span', {}, day), h('span', { class: 'count' }, String(list.length))), list.map(row)]),
+    empty.length ? h('div', { class: 'sb-sub' }, collapsible('empty', 'Empty sessions', h('span', { class: 'count' }, String(empty.length)), h('div', {}, empty.map(row)))) : null))
+  return [h('div', { class: 'page sidebar' }, usage, sessions)]
 }
 function relDay(d) {
   const day = 864e5, now = new Date(); const t0 = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime()

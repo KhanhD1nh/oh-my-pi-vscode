@@ -8,6 +8,7 @@ import * as vscode from 'vscode'
 import { OmpHost, type OmpSession } from './agent.ts'
 import { resolveOmp } from './binary.ts'
 import { OmpConfigCli } from './settings.ts'
+import { sessionStats } from './stats.ts'
 import type { AgentModelChoice, AgentSetting, HostMessage, TabState, WebviewMessage } from './types.ts'
 
 const DIFF_SCHEME = 'oh-my-pi-diff'
@@ -82,7 +83,7 @@ class ChatViewProvider implements vscode.WebviewViewProvider {
       host = new OmpHost(this.command, () => cwd, {
         item: (s, item) => { this.markUnread(s.id); this.postTab(s.id, { type: 'upsert', tab: s.id, item }) },
         reset: s => { this.postTab(s.id, { type: 'reset', tab: s.id, items: s.transcript.items }) },
-        state: s => { this.postTab(s.id, { type: 'tab', tab: this.tabState(s) }); this.tickTitles() },
+        state: s => { this.postTab(s.id, { type: 'tab', tab: this.tabState(s) }); this.tickTitles(); if (!s.busy) this.refreshSidebar() },
         permission: async (s, title, options) => {
           const where = s?.title ? ` (${s.title})` : ''
           const pick = await vscode.window.showInformationMessage(`Oh My Pi${where}: ${title}`, { modal: true }, ...options.map(o => o.name))
@@ -162,6 +163,21 @@ class ChatViewProvider implements vscode.WebviewViewProvider {
     this.postTabs()
   }
 
+  /** omp's sessions for the current folder, with stats from omp's session files. */
+  private async sessionRows() {
+    const cwd = this.currentFolder()
+    const rows = await this.host(cwd).list()
+    const stats = await sessionStats(cwd, new Set(rows.map(r => r.sessionId))).catch(() => ({} as Record<string, never>))
+    return rows.map(r => stats[r.sessionId] ? { ...r, stats: stats[r.sessionId] } : r)
+  }
+
+  private sidebarTimer: ReturnType<typeof setTimeout> | undefined
+  /** Debounced: re-list sessions in the sidebar after a turn ends. */
+  private refreshSidebar(): void {
+    clearTimeout(this.sidebarTimer)
+    this.sidebarTimer = setTimeout(() => { void this.sessionRows().then(rows => this.post({ type: 'sessions', rows }), () => {}) }, 1500)
+  }
+
   /** Ctrl+Alt+P: show the last chat, or start one. */
   focusChat(): void {
     const t = this.tab(this.active) ?? this.tabs.at(-1)
@@ -220,7 +236,7 @@ class ChatViewProvider implements vscode.WebviewViewProvider {
           this.postTabs()
           const t = this.tab(from)
           if (t) reply({ type: 'reset', tab: t.session.id, items: t.session.transcript.items })
-          else reply({ type: 'sessions', rows: await this.host(this.currentFolder()).list() })
+          else reply({ type: 'sessions', rows: await this.sessionRows() })
           return
         }
         case 'newTab': await this.newTab(); return
@@ -239,7 +255,7 @@ class ChatViewProvider implements vscode.WebviewViewProvider {
         case 'setMode': await this.tab(m.tab)?.session.setMode(m.value); return
         case 'openFile': await this.openFile(m.path, m.line); return
         case 'openDiff': await this.openDiff(m.tab, m.toolId); return
-        case 'listSessions': reply({ type: 'sessions', rows: await this.host(this.currentFolder()).list() }); return
+        case 'listSessions': reply({ type: 'sessions', rows: await this.sessionRows() }); return
         case 'loadSession': {
           const cwd = this.currentFolder()
           const existing = this.tab(m.sessionId)
