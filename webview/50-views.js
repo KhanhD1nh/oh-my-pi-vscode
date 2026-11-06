@@ -26,7 +26,8 @@ function go(view) {
 function saveDraft() { const ta = document.getElementById('input'); if (ta && S.active) S.drafts[S.active] = ta.value }
 
 function chatView() {
-  transcriptEl = h('div', { class: 'transcript' })
+  // Focusable, labelled region (not a live region: streaming would read every token aloud): Tab lands here with a visible ring; arrows/PgUp/PgDn scroll; Esc goes back to the input.
+  transcriptEl = h('div', { class: 'transcript', tabindex: '0', role: 'region', 'aria-label': 'Chat transcript', onkeydown: e => { if (e.key === 'Escape') { e.preventDefault(); document.getElementById('input')?.focus() } } })
   nodes.clear()
   const list = items()
   if (!list.length) {
@@ -193,7 +194,7 @@ function menuEl() {
     const { agents, jobs } = activity()
     const jump = id => { closeMenu(); const n = nodes.get(id); n?.scrollIntoView({ block: 'center', behavior: 'smooth' }); n?.classList.add('flash'); setTimeout(() => n?.classList.remove('flash'), 900) }
     return h('div', { class: 'menu', style: 'left:6px;min-width:260px' },
-      agents.length ? [h('div', { class: 'menu-group' }, 'Subagents'), agents.map(a => h('button', { class: 'menu-item', onclick: () => jump(a.id) }, h('span', { class: 'tab-spin' }, SPIN[spinAt]), h('span', {}, a.label), h('span', { class: 'desc' }, since(T0.get(a.cid) ?? Date.now()))))] : null,
+      agents.length ? [h('div', { class: 'menu-group' }, 'Subagents'), agents.map(a => h('button', { class: 'menu-item', onclick: () => jump(a.id) }, runDot(), h('span', {}, a.label), h('span', { class: 'desc' }, since(T0.get(a.cid) ?? Date.now()))))] : null,
       jobs.length ? [h('div', { class: 'menu-group' }, 'Background'), jobs.map(j => h('button', { class: 'menu-item', onclick: () => jump(j.id) }, h('span', { class: 'live busy' }), h('span', {}, j.label), h('span', { class: 'desc' }, j.command)))] : null,
       h('div', { class: 'menu-group' }, 'Ask omp'),
       h('button', { class: 'menu-item', onclick: () => { closeMenu(); send({ type: 'prompt', tab: S.active, text: 'read jobs:// and give me the status of every running task and background service' }) } }, 'Check status of all jobs'))

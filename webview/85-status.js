@@ -55,7 +55,7 @@ function bgChip() {
   const { agents, jobs } = activity()
   if (!agents.length && !jobs.length) return null
   const label = [agents.length ? `${agents.length} agent${agents.length > 1 ? 's' : ''}` : '', jobs.length ? `${jobs.length} bg` : ''].filter(Boolean).join(' · ')
-  return h('button', { class: `chip-btn jobs${S.menu === 'jobs' ? ' open' : ''}`, title: 'Subagents and background jobs', onclick: () => openMenu('jobs') }, agents.length ? h('span', { class: 'tab-spin' }, SPIN[spinAt]) : h('span', { class: 'live busy' }), h('span', { class: 'label' }, label))
+  return h('button', { class: `chip-btn jobs${S.menu === 'jobs' ? ' open' : ''}`, title: 'Subagents and background jobs', onclick: () => openMenu('jobs') }, agents.length ? runDot() : h('span', { class: 'live busy' }), h('span', { class: 'label' }, label))
 }
 // live timers on running agent cards
 setInterval(() => { for (const el of document.querySelectorAll('[data-t0]')) if (el.dataset.t0) el.textContent = since(Number(el.dataset.t0)) }, 1000)

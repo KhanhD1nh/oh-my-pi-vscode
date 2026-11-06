@@ -612,3 +612,23 @@ mark.hit.cur { background: var(--omp-yellow); color: #1f2024; }
 .goal-btn:hover { background: var(--soft); }
 .goal-btn.primary { background: var(--vscode-button-background); color: var(--vscode-button-foreground); border-color: transparent; }
 .goal-btn.muted { color: var(--muted); }
+
+/* ── calmer "working" state: one moving thing (the spinner on the Working line) ── */
+/* still dot for secondary running markers */
+.run-dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--omp-purple); flex: none; vertical-align: middle; }
+/* running step: the bullet is solid, no blink/glow */
+.step.pending::before, .step.in_progress::before { background: var(--omp-purple); box-shadow: none; animation: none; }
+.bullet.pending, .bullet.in_progress, .live.busy, .astep.running .astep-dot { animation: none; }
+/* no shimmer on step names, no pulsing input border */
+.step.in_progress .tool-verb { background: none; -webkit-background-clip: border-box; background-clip: border-box; color: inherit; animation: none; }
+.composer.busy { animation: none; border-color: color-mix(in srgb, var(--omp-purple) 35%, var(--line)); }
+/* the Working line keeps a slow shimmer: the single place the eye should go */
+.shimmer { animation-duration: 2.4s; }
+
+/* ── keyboard focus ── */
+/* The transcript scrolls, so Tab reaches it; show where focus is and let arrows / PgUp / PgDn scroll it. */
+.transcript:focus-visible { outline: 1px solid var(--vscode-focusBorder); outline-offset: -2px; }
+.transcript:focus:not(:focus-visible) { outline: none; }
+#input:focus-visible { outline: none; }
+.composer:has(#input:focus-visible) { border-color: var(--vscode-focusBorder); box-shadow: 0 0 0 1px var(--vscode-focusBorder); }
+button:focus-visible, .chip-btn:focus-visible, .menu-item:focus-visible, .tabchip:focus-visible { outline: 1px solid var(--vscode-focusBorder); outline-offset: 1px; }

@@ -4,7 +4,7 @@ function piIcon(t) {
   const pi = svg('<path fill="currentColor" stroke="none" transform="scale(.6667)" d="M3 6.5C3 5.1 4.1 4 5.5 4H20a1.5 1.5 0 0 1 0 3h-3v8.5c0 .6.4 1 1 1 .4 0 .7-.2 1-.4a1.4 1.4 0 0 1 2 2c-.8.8-1.9 1.3-3 1.3-2.3 0-4-1.6-4-3.9V7H10v12.5a1.5 1.5 0 0 1-3 0V7h-1.5c-.8 0-1.5.7-1.5 1.5a1.5 1.5 0 0 1-3 0v-2Z"/>')
   pi.setAttribute('class', `tab-ico${t.busy ? ' busy' : ''}${t.unread ? ' unread' : ''}`)
   if (!t.busy) return pi
-  const dots = h('span', { class: 'tab-spin' }, SPIN[spinAt])
+  const dots = runDot()
   return h('span', { class: 'tab-ico-wrap' }, pi, dots)
 }
 
@@ -22,10 +22,19 @@ function userActions(it) {
 }
 document.addEventListener('click', e => { if (S.userMenu && !e.target.closest('.ua')) { const it = items().find(x => x.id === S.userMenu); S.userMenu = null; if (it) upsertNode(it) } })
 
-// CLI-style braille spinner beside π on running tabs; one shared timer.
+// CLI-style braille spinner. Only the main "Working…" line animates (.tab-spin.spin-main); every other running
+// marker is a still dot, so one thing moves on screen instead of five. 10 frames/s, and no work at all when
+// nothing is running.
 const SPIN = '⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏'
 let spinAt = 0
-setInterval(() => { spinAt = (spinAt + 1) % SPIN.length; for (const el of document.querySelectorAll('.tab-spin')) el.textContent = SPIN[spinAt] }, 80)
+setInterval(() => {
+  const live = document.querySelectorAll('.tab-spin.spin-main')
+  if (live.length === 0) return
+  spinAt = (spinAt + 1) % SPIN.length
+  for (const el of live) el.textContent = SPIN[spinAt]
+}, 100)
+/** Still marker for secondary "running" places (subagent rows, goal bar, chips). */
+function runDot() { return h('span', { class: 'run-dot', 'aria-hidden': 'true' }) }
 
 /** omp `ask` tool: a form of choices; the answer goes back to omp. */
 /** omp's plan approval arrives as a one-question ask: "Approve plan "<file>" and start implementation?" + plan head. */

@@ -73,7 +73,7 @@ function agentEl(c, key, info) {
   const rows = info.tasks.map(t => {
     const k = `${c.id}:${t.name}`, isOpen = S.open.has(k), got = S.steps?.[k]
     const row = h('div', { class: `agent-row ${c.status}${isOpen ? ' open' : ''}`, onclick: e => { e.stopPropagation(); toggleAgent(k, c.id, t.name, key) } },
-      h('span', { class: 'agent-ico' }, running ? h('span', { class: 'tab-spin' }, SPIN[spinAt]) : c.status === 'failed' ? '✕' : '✓'),
+      h('span', { class: 'agent-ico' }, running ? runDot() : c.status === 'failed' ? '✕' : '✓'),
       h('span', { class: 'agent-name' }, t.name ?? 'task'), t.agent ? h('span', { class: 'agent-kind' }, t.agent) : null,
       h('span', { class: 'agent-task' }, String(t.task ?? '').split('\n')[0]),
       got?.steps.length ? h('span', { class: 'agent-count' }, `${got.steps.filter(s => s.tool).length} steps${got.cost ? ` · $${got.cost.toFixed(2)}` : ''}`) : null)

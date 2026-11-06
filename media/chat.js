@@ -143,7 +143,7 @@ function agentEl(c, key, info) {
   const rows = info.tasks.map(t => {
     const k = `${c.id}:${t.name}`, isOpen = S.open.has(k), got = S.steps?.[k]
     const row = h('div', { class: `agent-row ${c.status}${isOpen ? ' open' : ''}`, onclick: e => { e.stopPropagation(); toggleAgent(k, c.id, t.name, key) } },
-      h('span', { class: 'agent-ico' }, running ? h('span', { class: 'tab-spin' }, SPIN[spinAt]) : c.status === 'failed' ? '✕' : '✓'),
+      h('span', { class: 'agent-ico' }, running ? runDot() : c.status === 'failed' ? '✕' : '✓'),
       h('span', { class: 'agent-name' }, t.name ?? 'task'), t.agent ? h('span', { class: 'agent-kind' }, t.agent) : null,
       h('span', { class: 'agent-task' }, String(t.task ?? '').split('\n')[0]),
       got?.steps.length ? h('span', { class: 'agent-count' }, `${got.steps.filter(s => s.tool).length} steps${got.cost ? ` · $${got.cost.toFixed(2)}` : ''}`) : null)
@@ -267,7 +267,7 @@ function renderWorking() {
   if (!transcriptEl) return
   transcriptEl.querySelector('.working')?.remove()
   const t = tab()
-  if (t.busy) { transcriptEl.append(h('div', { class: 'working' }, h('span', { class: 'work-ico' }, h('span', { class: 'tab-spin' }, SPIN[spinAt])), h('span', { class: 'working-label shimmer' }), t.queued ? h('span', { class: 'muted' }, ` · ${t.queued} queued`) : null)); updateWorking() }
+  if (t.busy) { transcriptEl.append(h('div', { class: 'working' }, h('span', { class: 'work-ico', 'aria-hidden': 'true' }, h('span', { class: 'tab-spin spin-main' }, SPIN[spinAt])), h('span', { class: 'working-label shimmer' }), t.queued ? h('span', { class: 'muted' }, ` · ${t.queued} queued`) : null)); updateWorking() }
 }
 
 // Chat view, composer, menus (model, mode, add, slash, files), history / sidebar.
@@ -298,7 +298,8 @@ function go(view) {
 function saveDraft() { const ta = document.getElementById('input'); if (ta && S.active) S.drafts[S.active] = ta.value }
 
 function chatView() {
-  transcriptEl = h('div', { class: 'transcript' })
+  // Focusable, labelled region (not a live region: streaming would read every token aloud): Tab lands here with a visible ring; arrows/PgUp/PgDn scroll; Esc goes back to the input.
+  transcriptEl = h('div', { class: 'transcript', tabindex: '0', role: 'region', 'aria-label': 'Chat transcript', onkeydown: e => { if (e.key === 'Escape') { e.preventDefault(); document.getElementById('input')?.focus() } } })
   nodes.clear()
   const list = items()
   if (!list.length) {
@@ -465,7 +466,7 @@ function menuEl() {
     const { agents, jobs } = activity()
     const jump = id => { closeMenu(); const n = nodes.get(id); n?.scrollIntoView({ block: 'center', behavior: 'smooth' }); n?.classList.add('flash'); setTimeout(() => n?.classList.remove('flash'), 900) }
     return h('div', { class: 'menu', style: 'left:6px;min-width:260px' },
-      agents.length ? [h('div', { class: 'menu-group' }, 'Subagents'), agents.map(a => h('button', { class: 'menu-item', onclick: () => jump(a.id) }, h('span', { class: 'tab-spin' }, SPIN[spinAt]), h('span', {}, a.label), h('span', { class: 'desc' }, since(T0.get(a.cid) ?? Date.now()))))] : null,
+      agents.length ? [h('div', { class: 'menu-group' }, 'Subagents'), agents.map(a => h('button', { class: 'menu-item', onclick: () => jump(a.id) }, runDot(), h('span', {}, a.label), h('span', { class: 'desc' }, since(T0.get(a.cid) ?? Date.now()))))] : null,
       jobs.length ? [h('div', { class: 'menu-group' }, 'Background'), jobs.map(j => h('button', { class: 'menu-item', onclick: () => jump(j.id) }, h('span', { class: 'live busy' }), h('span', {}, j.label), h('span', { class: 'desc' }, j.command)))] : null,
       h('div', { class: 'menu-group' }, 'Ask omp'),
       h('button', { class: 'menu-item', onclick: () => { closeMenu(); send({ type: 'prompt', tab: S.active, text: 'read jobs:// and give me the status of every running task and background service' }) } }, 'Check status of all jobs'))
@@ -836,7 +837,7 @@ function piIcon(t) {
   const pi = svg('<path fill="currentColor" stroke="none" transform="scale(.6667)" d="M3 6.5C3 5.1 4.1 4 5.5 4H20a1.5 1.5 0 0 1 0 3h-3v8.5c0 .6.4 1 1 1 .4 0 .7-.2 1-.4a1.4 1.4 0 0 1 2 2c-.8.8-1.9 1.3-3 1.3-2.3 0-4-1.6-4-3.9V7H10v12.5a1.5 1.5 0 0 1-3 0V7h-1.5c-.8 0-1.5.7-1.5 1.5a1.5 1.5 0 0 1-3 0v-2Z"/>')
   pi.setAttribute('class', `tab-ico${t.busy ? ' busy' : ''}${t.unread ? ' unread' : ''}`)
   if (!t.busy) return pi
-  const dots = h('span', { class: 'tab-spin' }, SPIN[spinAt])
+  const dots = runDot()
   return h('span', { class: 'tab-ico-wrap' }, pi, dots)
 }
 
@@ -854,10 +855,19 @@ function userActions(it) {
 }
 document.addEventListener('click', e => { if (S.userMenu && !e.target.closest('.ua')) { const it = items().find(x => x.id === S.userMenu); S.userMenu = null; if (it) upsertNode(it) } })
 
-// CLI-style braille spinner beside π on running tabs; one shared timer.
+// CLI-style braille spinner. Only the main "Working…" line animates (.tab-spin.spin-main); every other running
+// marker is a still dot, so one thing moves on screen instead of five. 10 frames/s, and no work at all when
+// nothing is running.
 const SPIN = '⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏'
 let spinAt = 0
-setInterval(() => { spinAt = (spinAt + 1) % SPIN.length; for (const el of document.querySelectorAll('.tab-spin')) el.textContent = SPIN[spinAt] }, 80)
+setInterval(() => {
+  const live = document.querySelectorAll('.tab-spin.spin-main')
+  if (live.length === 0) return
+  spinAt = (spinAt + 1) % SPIN.length
+  for (const el of live) el.textContent = SPIN[spinAt]
+}, 100)
+/** Still marker for secondary "running" places (subagent rows, goal bar, chips). */
+function runDot() { return h('span', { class: 'run-dot', 'aria-hidden': 'true' }) }
 
 /** omp `ask` tool: a form of choices; the answer goes back to omp. */
 /** omp's plan approval arrives as a one-question ask: "Approve plan "<file>" and start implementation?" + plan head. */
@@ -986,7 +996,7 @@ function bgChip() {
   const { agents, jobs } = activity()
   if (!agents.length && !jobs.length) return null
   const label = [agents.length ? `${agents.length} agent${agents.length > 1 ? 's' : ''}` : '', jobs.length ? `${jobs.length} bg` : ''].filter(Boolean).join(' · ')
-  return h('button', { class: `chip-btn jobs${S.menu === 'jobs' ? ' open' : ''}`, title: 'Subagents and background jobs', onclick: () => openMenu('jobs') }, agents.length ? h('span', { class: 'tab-spin' }, SPIN[spinAt]) : h('span', { class: 'live busy' }), h('span', { class: 'label' }, label))
+  return h('button', { class: `chip-btn jobs${S.menu === 'jobs' ? ' open' : ''}`, title: 'Subagents and background jobs', onclick: () => openMenu('jobs') }, agents.length ? runDot() : h('span', { class: 'live busy' }), h('span', { class: 'label' }, label))
 }
 // live timers on running agent cards
 setInterval(() => { for (const el of document.querySelectorAll('[data-t0]')) if (el.dataset.t0) el.textContent = since(Number(el.dataset.t0)) }, 1000)
@@ -1075,7 +1085,7 @@ function goalBar() {
   const label = { active: 'Working', paused: 'Paused', done: 'Done', stopped: 'Stopped', limit: 'Limit reached' }[g.status]
   const btn = (text, action, cls = '') => h('button', { class: `goal-btn ${cls}`, onclick: () => send({ type: 'goal', tab: S.active, action }) }, text)
   return h('div', { class: `goalbar ${g.status}`, id: 'goalbar' },
-    h('span', { class: 'goal-ico' }, g.status === 'active' && tab().busy ? h('span', { class: 'tab-spin' }, SPIN[spinAt]) : g.status === 'done' ? '✓' : '🎯'),
+    h('span', { class: 'goal-ico' }, g.status === 'active' && tab().busy ? runDot() : g.status === 'done' ? '✓' : '🎯'),
     h('span', { class: 'goal-text', title: g.objective }, g.objective),
     h('span', { class: 'goal-meta' }, `${label} · turn ${g.turns}/${g.maxTurns}${g.reason ? ` · ${g.reason}` : ''}`),
     g.status === 'active' ? btn('Pause', 'pause') : g.status === 'done' || g.status === 'stopped' ? null : btn(g.status === 'limit' ? 'More turns' : 'Resume', 'resume', 'primary'),

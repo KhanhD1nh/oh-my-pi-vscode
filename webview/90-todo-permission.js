@@ -59,7 +59,7 @@ function goalBar() {
   const label = { active: 'Working', paused: 'Paused', done: 'Done', stopped: 'Stopped', limit: 'Limit reached' }[g.status]
   const btn = (text, action, cls = '') => h('button', { class: `goal-btn ${cls}`, onclick: () => send({ type: 'goal', tab: S.active, action }) }, text)
   return h('div', { class: `goalbar ${g.status}`, id: 'goalbar' },
-    h('span', { class: 'goal-ico' }, g.status === 'active' && tab().busy ? h('span', { class: 'tab-spin' }, SPIN[spinAt]) : g.status === 'done' ? '✓' : '🎯'),
+    h('span', { class: 'goal-ico' }, g.status === 'active' && tab().busy ? runDot() : g.status === 'done' ? '✓' : '🎯'),
     h('span', { class: 'goal-text', title: g.objective }, g.objective),
     h('span', { class: 'goal-meta' }, `${label} · turn ${g.turns}/${g.maxTurns}${g.reason ? ` · ${g.reason}` : ''}`),
     g.status === 'active' ? btn('Pause', 'pause') : g.status === 'done' || g.status === 'stopped' ? null : btn(g.status === 'limit' ? 'More turns' : 'Resume', 'resume', 'primary'),
