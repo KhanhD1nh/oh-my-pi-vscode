@@ -427,3 +427,4 @@ code { font-size: 0.88em; }
 .step.in_progress .tool-verb { background: linear-gradient(90deg, var(--vscode-foreground) 40%, #bd93f9 50%, var(--vscode-foreground) 60%); background-size: 250% 100%; -webkit-background-clip: text; background-clip: text; color: transparent; animation: shimmer 1.8s linear infinite; }
 .composer.busy { border-color: color-mix(in srgb, #bd93f9 45%, var(--line)); animation: ring 2.4s ease-in-out infinite; }
 @keyframes ring { 50% { border-color: color-mix(in srgb, #bd93f9 15%, var(--line)); } }
+.menu.slash { max-height: min(420px, 60vh); }

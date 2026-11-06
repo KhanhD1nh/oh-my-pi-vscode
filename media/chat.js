@@ -372,7 +372,8 @@ function menuEl() {
   if (S.menu === 'slash') {
     const hits = slashHits()
     if (!hits.length) return null
-    return h('div', { class: 'menu', style: 'left:0;right:0' }, hits.map((c, i) => h('button', { class: `menu-item${i === S.menuIndex ? ' active' : ''}`, onclick: () => pickSlash(c) }, h('strong', {}, '/' + c.name), h('span', { class: 'desc' }, c.description ?? ''))))
+    queueMicrotask(() => document.querySelector('.menu.slash .menu-item.active')?.scrollIntoView({ block: 'nearest' }))
+    return h('div', { class: 'menu slash', style: 'left:0;right:0' }, h('div', { class: 'menu-group' }, `${hits.length} commands`), hits.map((c, i) => h('button', { class: `menu-item${i === S.menuIndex ? ' active' : ''}`, onclick: () => pickSlash(c) }, h('strong', {}, '/' + c.name), h('span', { class: 'desc' }, c.description ?? ''))))
   }
   if (S.menu === 'files') {
     return h('div', { class: 'menu', style: 'left:0;right:0' },
@@ -382,7 +383,7 @@ function menuEl() {
   }
   return null
 }
-function slashHits() { const ta = document.getElementById('input'); const m = ta && /^\/(\S*)$/.exec(ta.value); return m ? tab().commands.filter(c => c.name.startsWith(m[1])).slice(0, 10) : [] }
+function slashHits() { const ta = document.getElementById('input'); const m = ta && /^\/(\S*)$/.exec(ta.value); if (!m) return []; const q = m[1].toLowerCase(); const all = tab().commands; return [...all.filter(c => c.name.toLowerCase().startsWith(q)), ...all.filter(c => !c.name.toLowerCase().startsWith(q) && (c.name.toLowerCase().includes(q) || (c.description ?? '').toLowerCase().includes(q)))] }
 /** `@query` right before the caret, or null. */
 function mentionAt(ta) { const before = ta.value.slice(0, ta.selectionStart); const m = /(^|\s)@([^\s@]*)$/.exec(before); return m ? m[2] : null }
 let fileTimer = null
