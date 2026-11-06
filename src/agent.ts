@@ -164,6 +164,26 @@ export class OmpSession {
   private asks = new Map<string, (r: { action: 'accept' | 'decline' | 'cancel'; content?: Record<string, AskValue> }) => void>()
 
   /** @internal omp asked the user something; resolves when the form is answered. */
+  private permits = new Map<string, (optionId: string | undefined) => void>()
+
+  /** @internal omp needs consent for a tool; resolves with the chosen option (undefined = cancel). */
+  permit(title: string, options: { optionId: string; name: string; kind: string }[]): Promise<string | undefined> {
+    const item = this.transcript.permission(title, options)
+    this.events.item(this, item)
+    return new Promise(resolve => this.permits.set(item.id, resolve))
+  }
+
+  /** The user picked an option on permission card `itemId`. */
+  choose(itemId: string, optionId: string | undefined): void {
+    const resolve = this.permits.get(itemId)
+    const item = this.transcript.items.find(i => i.id === itemId)
+    if (resolve === undefined || item?.type !== 'permission') return
+    this.permits.delete(itemId)
+    item.chosen = optionId ?? 'cancelled'
+    this.events.item(this, item)
+    resolve(optionId)
+  }
+
   ask(message: string, schema: AskSchema): Promise<{ action: 'accept' | 'decline' | 'cancel'; content?: Record<string, AskValue> }> {
     const item = this.transcript.ask(message, schema)
     this.events.item(this, item)
@@ -184,6 +204,7 @@ export class OmpSession {
   /** Stop the running turn and drop queued prompts. */
   cancel(): void {
     for (const id of [...this.asks.keys()]) this.answer(id, 'cancel')
+    for (const id of [...this.permits.keys()]) this.choose(id, undefined)
     this.queue = []
     void this.host.rpc().notify(methods.agent.session.cancel, { sessionId: this.id }).catch(() => {})
     this.events.state(this)

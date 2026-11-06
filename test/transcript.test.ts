@@ -43,3 +43,19 @@ test('copyFrom clones items so the fork can diverge', () => {
   assert.equal(b.items.length, 2)
   assert.notEqual(b.items[1]!.id, a.items[0]!.id)
 })
+
+test('todo tool result carries the full list from rawOutput.details.phases', () => {
+  const t = new Transcript()
+  const phases = [{ name: 'Build', tasks: [{ content: 'a', status: 'completed' }, { content: 'b', status: 'in_progress' }] }]
+  t.apply({ sessionUpdate: 'tool_call', toolCallId: 'x', name: 'todo', title: 'Plan', status: 'pending' })
+  const it = t.apply({ sessionUpdate: 'tool_call_update', toolCallId: 'x', status: 'completed', rawOutput: { content: [], details: { phases } } })
+  assert.equal(it?.type, 'tool')
+  assert.deepEqual(it?.type === 'tool' ? it.card.todo : null, phases)
+})
+
+test('permission items are appended with their options', () => {
+  const t = new Transcript()
+  const it = t.permission('Run rm -rf build', [{ optionId: 'y', name: 'Allow', kind: 'allow_once' }])
+  assert.equal(it.type, 'permission')
+  assert.equal(t.items.length, 1)
+})

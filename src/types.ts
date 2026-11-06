@@ -39,7 +39,12 @@ export interface ToolCard {
   input?: string
   output?: string
   diff?: { path: string; oldText: string; newText: string }
+  /** omp `todo` tool: the full list after this call. */
+  todo?: TodoPhase[]
 }
+
+/** One phase of omp's todo list. */
+export interface TodoPhase { name: string; tasks: { content: string; status: 'pending' | 'in_progress' | 'completed' | 'abandoned' | string }[] }
 
 /** One transcript item. */
 export type ChatItem =
@@ -48,6 +53,7 @@ export type ChatItem =
   | { type: 'thought'; id: string; text: string }
   | { type: 'tool'; id: string; card: ToolCard }
   | { type: 'error'; id: string; text: string }
+  | { type: 'permission'; id: string; title: string; options: { optionId: string; name: string; kind: string }[]; chosen?: string }
   | { type: 'ask'; id: string; message: string; schema: AskSchema; answer?: { action: 'accept' | 'decline' | 'cancel'; content?: Record<string, AskValue> } }
 
 /** Value of one answered form field. */
@@ -141,5 +147,6 @@ export type WebviewMessage =
   | { type: 'setApproval'; value: string }
   | { type: 'agentSteps'; tab: string; toolId: string; name: string }
   | { type: 'addSelection' }
+  | { type: 'permit'; tab: string; itemId: string; optionId?: string }
   | { type: 'answer'; tab: string; itemId: string; action: 'accept' | 'decline' | 'cancel'; content?: Record<string, AskValue> }
   | { type: 'rewind'; tab: string; itemId: string }

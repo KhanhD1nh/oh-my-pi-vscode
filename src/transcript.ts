@@ -59,6 +59,13 @@ export class Transcript {
   }
 
   /** Append a question form from omp's `ask` tool. */
+  /** Append a permission request card. */
+  permission(title: string, options: { optionId: string; name: string; kind: string }[]): ChatItem {
+    const item: ChatItem = { type: 'permission', id: this.nextId(), title, options }
+    this.items.push(item)
+    return item
+  }
+
   ask(message: string, schema: AskSchema): ChatItem {
     const item: ChatItem = { type: 'ask', id: this.nextId(), message, schema }
     this.items.push(item)
@@ -120,6 +127,8 @@ export class Transcript {
     if (out !== '') card.output = out
     const diff = toolDiff(update)
     if (diff !== undefined) { card.diff = diff; card.path ??= diff.path }
+    const phases = (update.rawOutput as { details?: { phases?: unknown } } | undefined)?.details?.phases
+    if (card.name === 'todo' && Array.isArray(phases)) card.todo = phases as ToolCard['todo']
     return { type: 'tool', id: `t-${id}`, card }
   }
 

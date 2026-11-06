@@ -86,14 +86,22 @@ class ChatViewProvider implements vscode.WebviewViewProvider {
         reset: s => { this.pending.delete(s.id); this.postTab(s.id, { type: 'reset', tab: s.id, items: s.transcript.items }) },
         state: s => {
           if (!s.busy) this.flushUpserts()
+          const was = this.wasBusy.get(s.id) ?? false
+          this.wasBusy.set(s.id, s.busy)
+          if (was && !s.busy) this.notifyDone(s)
           this.postTab(s.id, { type: 'tab', tab: this.tabState(s) }); this.tickTitles()
           // Sidebar follows title changes (omp names a session after its first turn) and turn ends.
           if (!s.busy || s.title !== this.lastTitles.get(s.id)) { this.lastTitles.set(s.id, s.title); this.refreshSidebar() }
           if (!s.busy) void this.refreshTabStats(s.id)
         },
         permission: async (s, title, options) => {
-          const where = s?.title ? ` (${s.title})` : ''
-          const pick = await vscode.window.showInformationMessage(`Oh My Pi${where}: ${title}`, { modal: true }, ...options.map(o => o.name))
+          const t = s ? this.tab(s.id) : undefined
+          if (s && t) {
+            // Answer in the chat; if the tab is out of sight, say so in a toast too.
+            if (!t.panel.visible) void vscode.window.showInformationMessage(`OMP needs permission: ${title}`, 'Show').then(p => { if (p) t.panel.reveal() })
+            return s.permit(title, options)
+          }
+          const pick = await vscode.window.showInformationMessage(`OMP: ${title}`, { modal: true }, ...options.map(o => o.name))
           return options.find(o => o.name === pick)?.optionId
         },
         log: line => { this.output.appendLine(line) },
@@ -201,6 +209,18 @@ class ChatViewProvider implements vscode.WebviewViewProvider {
   }
 
   private readonly lastTitles = new Map<string, string | undefined>()
+  private readonly wasBusy = new Map<string, boolean>()
+
+  /** A chat finished while you were elsewhere: toast with a jump back (setting ohMyPi.notifyOnDone). */
+  private notifyDone(s: OmpSession): void {
+    const t = this.tab(s.id)
+    if (!t || (t.panel.active && vscode.window.state.focused)) return
+    if (!vscode.workspace.getConfiguration('ohMyPi').get<boolean>('notifyOnDone', true)) return
+    const last = [...s.transcript.items].reverse().find(i => i.type === 'assistant' || i.type === 'error')
+    const summary = last && 'text' in last ? last.text.replace(/\s+/gu, ' ').slice(0, 90) : ''
+    const name = (s.title ?? 'Chat').replace(/^\S*\s*/u, m => /\p{Extended_Pictographic}/u.test(m) ? '' : m)
+    void vscode.window.showInformationMessage(`OMP finished: ${name}${summary ? ` — ${summary}` : ''}`, 'Open').then(p => { if (p) t.panel.reveal() })
+  }
   private sidebarTimer: ReturnType<typeof setTimeout> | undefined
   /** Debounced: re-list sessions in the sidebar after a turn ends. */
   private refreshSidebar(): void {
@@ -340,6 +360,7 @@ class ChatViewProvider implements vscode.WebviewViewProvider {
           for (const x of this.tabs) this.postTab(x.session.id, { type: 'approval', value: m.value })
           return
         case 'addSelection': this.addSelection(); return
+        case 'permit': this.tab(m.tab)?.session.choose(m.itemId, m.optionId); return
         case 'answer': this.tab(m.tab)?.session.answer(m.itemId, m.action, m.content); return
         case 'rewind': await this.rewind(m.tab, m.itemId); return
         case 'agentSteps': {
