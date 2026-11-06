@@ -269,3 +269,10 @@ svg.tab-orbit circle { fill: currentColor; stroke: none; }
 .user-wrap + .step::after { top: 11px; }
 .step:has(+ .user-wrap)::after { bottom: auto; height: 14px; }
 .user-wrap:hover { padding-bottom: 28px; }
+
+/* tab alignment: icon, label and close all centered on one axis */
+.tabchip { align-items: center; line-height: 1; }
+.tab-label { line-height: 30px; display: block; }
+.tab-x { display: inline-flex; align-items: center; justify-content: center; padding: 0; }
+.tab-x svg { width: 12px; height: 12px; display: block; }
+svg.tab-ico { display: block; }

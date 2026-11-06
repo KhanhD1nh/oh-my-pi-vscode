@@ -161,7 +161,7 @@ function tabbar() {
     S.tabs.map((t, i) => h('div', { class: `tabchip${t.id === S.active ? ' on' : ''}${t.unread ? ' unread' : ''}`, title: t.title ?? 'New chat', onclick: () => activate(t.id), onauxclick: e => { if (e.button === 1) send({ type: 'closeTab', tab: t.id }) } },
       piIcon(t),
       h('span', { class: 'tab-label' }, t.title || `Chat ${i + 1}`),
-      h('button', { class: 'tab-x', title: 'Close tab', onclick: e => { e.stopPropagation(); send({ type: 'closeTab', tab: t.id }) } }, '×'))),
+      h('button', { class: 'tab-x', title: 'Close tab', onclick: e => { e.stopPropagation(); send({ type: 'closeTab', tab: t.id }) } }, svg('<path d="M4.5 4.5l7 7M11.5 4.5l-7 7"/>')))),
     )
   return h('div', { class: 'topbar' }, bar, h('button', { class: 'icon-btn', title: 'New tab (runs in parallel)', onclick: () => send({ type: 'newTab' }) }, svg(ICON.plus)),
     h('button', { class: 'icon-btn', title: 'History', onclick: () => go('history') }, svg(ICON.history)),
