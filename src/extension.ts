@@ -33,6 +33,7 @@ export function activate(context: vscode.ExtensionContext): void {
   context.subscriptions.push(
     output,
     vscode.window.registerWebviewViewProvider('ohMyPi.chat', provider, { webviewOptions: { retainContextWhenHidden: true } }),
+    vscode.window.registerWebviewPanelSerializer(PANEL_TYPE, { deserializeWebviewPanel: (panel, state) => provider.restorePanel(panel, state as never) }),
     vscode.commands.registerCommand('ohMyPi.newSession', () => provider.newTab()),
     vscode.commands.registerCommand('ohMyPi.history', () => provider.showView('history')),
     vscode.commands.registerCommand('ohMyPi.settings', () => provider.showView('settings')),
@@ -142,12 +143,13 @@ class ChatViewProvider implements vscode.WebviewViewProvider {
   }
 
   /** Open a chat panel for `session` next to the other chats (or beside the editor). */
-  private openPanel(session: OmpSession, cwd: string): void {
+  private openPanel(session: OmpSession, cwd: string, restored?: vscode.WebviewPanel): void {
     const media = vscode.Uri.joinPath(this.context.extensionUri, 'media')
     const column = this.tab(this.active)?.panel.viewColumn ?? vscode.ViewColumn.Beside
-    const panel = vscode.window.createWebviewPanel(PANEL_TYPE, session.title ?? 'New chat', { viewColumn: column, preserveFocus: false }, { enableScripts: true, retainContextWhenHidden: true, localResourceRoots: [media] })
+    const panel = restored ?? vscode.window.createWebviewPanel(PANEL_TYPE, session.title ?? 'New chat', { viewColumn: column, preserveFocus: false }, { enableScripts: true, retainContextWhenHidden: true, localResourceRoots: [media] })
+    if (restored) panel.webview.options = { enableScripts: true, localResourceRoots: [media] }
     panel.iconPath = vscode.Uri.joinPath(media, 'pi-tab.svg')
-    panel.webview.html = this.html(panel.webview, media, 'panel')
+    panel.webview.html = this.html(panel.webview, media, 'panel', { sessionId: session.id, cwd })
     const entry = { session, cwd, unread: false, panel, startedAt: Date.now() }
     this.tabs.push(entry)
     this.active = session.id
@@ -176,6 +178,22 @@ class ChatViewProvider implements vscode.WebviewViewProvider {
   private refreshSidebar(): void {
     clearTimeout(this.sidebarTimer)
     this.sidebarTimer = setTimeout(() => { void this.sessionRows().then(rows => this.post({ type: 'sessions', rows }), () => {}) }, 1500)
+  }
+
+  /**
+   * VS Code restored a chat tab after reload: reopen its omp session in that same tab.
+   * @param state - what the webview saved with `setState` (session id and folder).
+   */
+  async restorePanel(panel: vscode.WebviewPanel, state: { sessionId?: string; cwd?: string } | undefined): Promise<void> {
+    if (!state?.sessionId || !state.cwd) { panel.dispose(); return }
+    try {
+      const host = this.host(state.cwd)
+      const row = (await host.list()).find(r => r.sessionId === state.sessionId) ?? { sessionId: state.sessionId, cwd: state.cwd }
+      this.openPanel(await host.open(row), state.cwd, panel)
+    } catch (error) {
+      this.output.appendLine(`restore ${state.sessionId}: ${String(error)}`)
+      panel.dispose()
+    }
   }
 
   /** Ctrl+Alt+P: show the last chat, or start one. */
@@ -414,14 +432,14 @@ class ChatViewProvider implements vscode.WebviewViewProvider {
     await vscode.commands.executeCommand('vscode.diff', before, file, `${vscode.workspace.asRelativePath(file)} (Oh My Pi)`)
   }
 
-  private html(webview: vscode.Webview, media: vscode.Uri, mode: 'panel' | 'sidebar'): string {
+  private html(webview: vscode.Webview, media: vscode.Uri, mode: 'panel' | 'sidebar', restore?: { sessionId: string; cwd: string }): string {
     const nonce = Array.from({ length: 32 }, () => Math.floor(Math.random() * 36).toString(36)).join('')
     const script = webview.asWebviewUri(vscode.Uri.joinPath(media, 'chat.js'))
     const style = webview.asWebviewUri(vscode.Uri.joinPath(media, 'chat.css'))
     return `<!doctype html><html><head><meta charset="utf-8">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src ${webview.cspSource} data:; style-src ${webview.cspSource}; script-src 'nonce-${nonce}';">
 <meta name="viewport" content="width=device-width, initial-scale=1"><link rel="stylesheet" href="${style}"></head>
-<body data-mode="${mode}"><div id="app"></div><script nonce="${nonce}" src="${script}"></script></body></html>`
+<body data-mode="${mode}"${restore ? ` data-session="${encodeURIComponent(restore.sessionId)}" data-cwd="${encodeURIComponent(restore.cwd)}"` : ''}><div id="app"></div><script nonce="${nonce}" src="${script}"></script></body></html>`
   }
 
   dispose(): void { clearInterval(this.spinner); for (const h of this.hosts.values()) h.dispose() }

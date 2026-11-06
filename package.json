@@ -2,7 +2,7 @@
   "name": "oh-my-pi",
   "displayName": "Oh My Pi",
   "description": "Chat with the omp coding agent inside VS Code: streaming replies, tool cards, diffs, model picker and every omp setting.",
-  "version": "0.13.0",
+  "version": "0.14.0",
   "publisher": "khanhd1nh",
   "license": "MIT",
   "repository": {
@@ -20,14 +20,15 @@
   "icon": "media/icon.png",
   "main": "./dist/extension.js",
   "activationEvents": [
-    "onStartupFinished"
+    "onStartupFinished",
+    "onWebviewPanel:ohMyPi.panel"
   ],
   "contributes": {
     "viewsContainers": {
       "activitybar": [
         {
           "id": "ohMyPi",
-          "title": " ",
+          "title": "OMP",
           "icon": "media/pi.svg"
         }
       ]

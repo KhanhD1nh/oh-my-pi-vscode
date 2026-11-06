@@ -76,6 +76,8 @@ export class OmpSession {
         if (typeof update.title === 'string' && update.title) { this.title = update.title; this.events.state(this) }
         return
       default: {
+        // The background `/rename` turn only echoes "Session renamed to …"; keep it out of the chat.
+        if (this.renaming) return
         const item = this.transcript.apply(update)
         if (item !== undefined) this.events.item(this, item)
       }
@@ -99,7 +101,7 @@ export class OmpSession {
     if (this.busy && this.host.steering) { void this.steer(text, images); return }
     this.queue.push({ text, images })
     this.events.state(this)
-    if (!this.busy) void this.drain()
+    if (!this.busy && !this.renaming) void this.drain()
   }
 
   /**
@@ -137,8 +139,23 @@ export class OmpSession {
         this.busy = false
         this.events.state(this)
       }
+      if (!this.named && this.queue.length === 0) void this.nameSession()
     }
   }
+
+  /** omp names sessions by itself only in its TUI; over ACP ask once with `/rename` (no args = generate). */
+  private named = false
+  private renaming = false
+  private async nameSession(): Promise<void> {
+    this.named = true
+    this.renaming = true
+    try { await this.host.rpc().request(methods.agent.session.prompt, { sessionId: this.id, prompt: [{ type: 'text', text: '/rename' }] }) } catch { /* title stays the first prompt */ }
+    finally { this.renaming = false }
+    if (this.queue.length > 0 && !this.busy) void this.drain()
+  }
+
+  /** @internal Session already carries an omp title. */
+  markNamed(): void { this.named = true }
 
   /** Open questions from omp's `ask` tool, keyed by transcript item id. */
   private asks = new Map<string, (r: { action: 'accept' | 'decline' | 'cancel'; content?: Record<string, AskValue> }) => void>()
@@ -295,7 +312,7 @@ export class OmpHost {
     if (existing !== undefined) return existing
     await this.ensure()
     const session = new OmpSession(this, row.sessionId, this.events)
-    if (row.title) session.title = row.title
+    if (row.title) { session.title = row.title; if (!/^untitled/iu.test(row.title)) session.markNamed() }
     this.sessions.set(session.id, session)
     this.events.reset(session)
     const r = await this.rpc().request(methods.agent.session.load, { sessionId: row.sessionId, cwd: row.cwd || this.cwd(), mcpServers: [] }) as { configOptions?: ConfigOption[] }

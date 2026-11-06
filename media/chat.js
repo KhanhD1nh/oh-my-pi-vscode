@@ -148,6 +148,7 @@ function toolEl(c, key) {
 // ───────────── state ─────────────
 /** 'panel' = one chat in an editor tab; 'sidebar' = history + settings. */
 const MODE = document.body.dataset.mode ?? 'panel'
+if (document.body.dataset.session) vscode.setState?.({ sessionId: decodeURIComponent(document.body.dataset.session), cwd: decodeURIComponent(document.body.dataset.cwd ?? '') })
 const S = {
   view: MODE === 'sidebar' ? 'history' : 'chat', tabs: [], active: undefined, models: [], cwd: '', transcripts: {},
   sessions: [], settings: { status: 'idle', settings: [], models: [], failed: {} },
