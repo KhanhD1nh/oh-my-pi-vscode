@@ -18,6 +18,10 @@ const items = [
   { type: 'tool', id: 't-1', card: { id: '1', kind: 'read', name: 'read', title: 'Reading date helper', status: 'completed', path: 'D:/WorkSpace/XE-VN/src/lib/date.ts', output: '1: export function parse(s) {' } },
   { type: 'tool', id: 't-2', card: { id: '2', kind: 'edit', name: 'edit', title: 'Editing date helper', status: 'completed', path: 'D:/WorkSpace/XE-VN/src/lib/date.ts', diff: { path: 'D:/WorkSpace/XE-VN/src/lib/date.ts', oldText: 'export function parse(s) {\n  return new Date(s)\n}', newText: "export function parse(s) {\n  const [d, m, y] = s.split('/')\n  return new Date(+y, +m - 1, +d)\n}" } } },
   { type: 'tool', id: 't-3', card: { id: '3', kind: 'execute', name: 'bash', title: 'Run date tests', status: 'completed', input: '{"command":"npx vitest run src/lib"}', output: ' RUN  v3.2.4\n ✓ src/lib/date.test.ts (3 tests) 4ms\n\n Test Files  1 passed (1)\n      Tests  3 passed (3)\n   Start at  10:05:12\n   Duration  412ms\n extra line 1\n extra line 2' } },
+  { type: 'ask', id: 'q1', message: 'Two remaining changes need scope before editing:', schema: { properties: {
+    model: { type: 'string', title: 'Where should the model name show?', oneOf: [{ const: 'ui', title: 'Desktop UI', description: 'You see the active model.' }, { const: 'ctx', title: 'AI session context', description: 'The agent knows which model answers.' }, { const: 'both', title: 'Both', description: 'Recommended.' }, { const: 'skip', title: 'Skip this' }] },
+    signing: { type: 'string', title: 'Windows release', oneOf: [{ const: 'none', title: 'No certificate yet', description: 'Add artifact checks; app stays unsigned.' }, { const: 'have', title: 'Have a certificate' }, { const: 'unsure', title: 'Not sure' }] },
+  }, required: ['model', 'signing'] } },
   { type: 'assistant', id: 'i3', text: 'Fixed `parse` to read **dd/mm/yyyy** in src/lib/date.ts:2.\n\n- Root cause: `new Date("05/11/2026")` is parsed month-first.\n- Added a regression test.' },
 ]
 const settings = {
@@ -50,6 +54,7 @@ await page.click('.tool-line >> nth=1')
 await page.waitForTimeout(200)
 await page.screenshot({ path: `${out}/vsc-chat.png` }); await page.screenshot({ path: `${out}/vsc-tabs.png`, clip: { x: 0, y: 0, width: 440, height: 40 } })
 await page.hover('.user-wrap'); await page.click('.ua-btn'); await page.waitForTimeout(100); await page.screenshot({ path: `${out}/vsc-fork.png`, clip: { x: 0, y: 0, width: 440, height: 200 } }); await page.mouse.click(5, 500)
+await page.click('.ask-opt >> nth=2'); await page.click('.ask-opt >> nth=4'); await page.evaluate(() => document.querySelector('.ask').scrollIntoView()); await page.screenshot({ path: `${out}/vsc-ask.png` })
 await page.fill('#input', 'look at @dat')
  await page.focus('#input'); await page.evaluate(() => { const t = document.getElementById('input'); t.setSelectionRange(t.value.length, t.value.length); t.dispatchEvent(new Event('input')) })
  await post({ type: 'files', query: 'dat', files: ['src/lib/date.ts', 'src/lib/date.test.ts', 'src/features/reports/lib/date-range.ts'] })

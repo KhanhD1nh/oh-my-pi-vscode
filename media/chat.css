@@ -285,3 +285,28 @@ svg.tab-orbit { color: #bd93f9; }
 svg.tab-ico.unread { color: #bd93f9; }
 
 .tab-spin { flex: none; width: 10px; color: #bd93f9; font-family: var(--vscode-editor-font-family); font-size: 13px; line-height: 1; text-align: center; }
+
+/* omp ask form */
+.ask { border: 1px solid var(--vscode-focusBorder); border-radius: var(--radius); padding: 10px 12px; display: flex; flex-direction: column; gap: 10px; background: var(--vscode-input-background); }
+.ask.done { border-color: var(--line); background: none; gap: 4px; }
+.ask-msg p { margin: 0; }
+.ask-field { display: flex; flex-direction: column; gap: 4px; }
+.ask-q { font-weight: 600; display: flex; gap: 6px; align-items: center; }
+.ask-n { width: 18px; height: 18px; border-radius: 50%; display: inline-grid; place-items: center; font-size: 0.8em; background: var(--soft); flex: none; }
+.ask-d { color: var(--muted); font-size: 0.9em; }
+.ask-opt { display: flex; gap: 8px; align-items: flex-start; padding: 6px 8px; border: 1px solid var(--line); border-radius: var(--radius-sm); cursor: pointer; }
+.ask-opt:hover { background: var(--soft); }
+.ask-opt:has(input:checked) { border-color: var(--vscode-focusBorder); background: color-mix(in srgb, var(--vscode-focusBorder) 12%, transparent); }
+.ask-opt input { margin: 3px 0 0; accent-color: var(--vscode-focusBorder); }
+.ask-opt > span:last-child { display: flex; flex-direction: column; }
+.ask-opt b { font-weight: 500; }
+.ask-opt small { color: var(--muted); font-size: 0.88em; }
+.ask-key { color: var(--muted); font-family: var(--vscode-editor-font-family); font-size: 0.85em; margin-top: 1px; }
+.ask-text { width: 100%; resize: vertical; }
+.ask-actions { display: flex; justify-content: flex-end; gap: 8px; }
+.ask-submit { background: var(--vscode-button-background); color: var(--vscode-button-foreground); padding: 4px 14px; border-radius: var(--radius-sm); }
+.ask-submit:hover { background: var(--vscode-button-hoverBackground); }
+.ask-submit:disabled { opacity: .4; cursor: default; }
+.ask-skip { color: var(--muted); padding: 4px 10px; border-radius: var(--radius-sm); }
+.ask-skip:hover { background: var(--soft); }
+.ask-ans { font-size: 0.93em; }

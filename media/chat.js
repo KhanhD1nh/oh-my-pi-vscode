@@ -132,6 +132,7 @@ function itemBody(it) {
     }
     case 'tool': return toolEl(it.card, it.id)
     case 'error': return h('div', { class: 'msg error' }, it.text)
+    case 'ask': return askEl(it)
   }
 }
 function upsertNode(it) {
@@ -537,3 +538,41 @@ document.addEventListener('click', e => { if (S.userMenu && !e.target.closest('.
 const SPIN = '⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏'
 let spinAt = 0
 setInterval(() => { spinAt = (spinAt + 1) % SPIN.length; for (const el of document.querySelectorAll('.tab-spin')) el.textContent = SPIN[spinAt] }, 80)
+
+/** omp `ask` tool: a form of choices; the answer goes back to omp. */
+function askEl(it) {
+  const props = Object.entries(it.schema.properties ?? {})
+  const opts = p => p.oneOf?.map(o => ({ v: o.const, t: o.title, d: o.description })) ?? p.enum?.map(v => ({ v, t: v })) ?? p.items?.anyOf?.map(o => ({ v: o.const, t: o.title, d: o.description })) ?? p.items?.enum?.map(v => ({ v, t: v })) ?? null
+  if (it.answer) {
+    const c = it.answer.content ?? {}
+    const label = (p, v) => (opts(p) ?? []).find(o => o.v === v)?.t ?? String(v)
+    return h('div', { class: 'ask done' }, h('div', { class: 'ask-msg', html: md(it.message) }),
+      it.answer.action !== 'accept' ? h('div', { class: 'muted' }, 'Skipped') :
+        props.map(([k, p]) => h('div', { class: 'ask-ans' }, h('span', { class: 'muted' }, (p.title || k) + ': '), [c[k]].flat().map(v => label(p, v)).join(', '))))
+  }
+  const val = {}
+  for (const [k, p] of props) if (p.default != null) val[k] = p.default
+  const submit = h('button', { class: 'ask-submit', onclick: () => send({ type: 'answer', tab: S.active, itemId: it.id, action: 'accept', content: val }) }, 'Submit')
+  const check = () => { submit.disabled = (it.schema.required ?? []).some(k => val[k] === undefined || val[k] === '' || (Array.isArray(val[k]) && !val[k].length)) }
+  const fields = props.map(([k, p], qi) => {
+    const o = opts(p)
+    const head = h('div', { class: 'ask-q' }, props.length > 1 ? h('span', { class: 'ask-n' }, String(qi + 1)) : null, p.title || k)
+    const desc = p.description ? h('div', { class: 'ask-d' }, p.description) : null
+    let body
+    if (o && p.type === 'array') {
+      val[k] ??= []
+      body = o.map(x => h('label', { class: 'ask-opt' }, h('input', { type: 'checkbox', onchange: e => { val[k] = e.target.checked ? [...val[k], x.v] : val[k].filter(v => v !== x.v); check() } }), h('span', {}, h('b', {}, x.t), x.d ? h('small', {}, x.d) : null)))
+    } else if (o) {
+      body = o.map((x, i) => h('label', { class: 'ask-opt' }, h('input', { type: 'radio', name: it.id + k, ...val[k] === x.v ? { checked: true } : {}, onchange: () => { val[k] = x.v; check() } }), h('span', { class: 'ask-key' }, String.fromCharCode(65 + i)), h('span', {}, h('b', {}, x.t), x.d ? h('small', {}, x.d) : null)))
+    } else if (p.type === 'boolean') {
+      val[k] ??= false
+      body = h('label', { class: 'ask-opt' }, h('input', { type: 'checkbox', ...val[k] ? { checked: true } : {}, onchange: e => { val[k] = e.target.checked; check() } }), h('span', {}, 'Yes'))
+    } else {
+      body = h('textarea', { class: 'field ask-text', rows: 2, placeholder: 'Type your answer…', oninput: e => { val[k] = p.type === 'number' || p.type === 'integer' ? Number(e.target.value) : e.target.value; check() } })
+    }
+    return h('div', { class: 'ask-field' }, head, desc, body)
+  })
+  queueMicrotask(check)
+  return h('div', { class: 'ask' }, h('div', { class: 'ask-msg', html: md(it.message) }), fields,
+    h('div', { class: 'ask-actions' }, h('button', { class: 'ask-skip', onclick: () => send({ type: 'answer', tab: S.active, itemId: it.id, action: 'decline' }) }, 'Skip'), submit))
+}

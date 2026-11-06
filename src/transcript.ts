@@ -2,7 +2,7 @@
  * Pure fold of ACP `session/update` payloads into chat items. Streaming chunks extend the last item of the
  * same kind; tool calls are keyed by `toolCallId` and updated in place. No VS Code or process access here.
  */
-import type { ChatItem, ToolCard } from './types.ts'
+import type { AskSchema,  ChatItem, ToolCard } from './types.ts'
 
 type Update = Record<string, unknown>
 
@@ -54,6 +54,13 @@ export class Transcript {
   /** Append the user's prompt. */
   user(text: string): ChatItem {
     const item: ChatItem = { type: 'user', id: this.nextId(), text }
+    this.items.push(item)
+    return item
+  }
+
+  /** Append a question form from omp's `ask` tool. */
+  ask(message: string, schema: AskSchema): ChatItem {
+    const item: ChatItem = { type: 'ask', id: this.nextId(), message, schema }
     this.items.push(item)
     return item
   }

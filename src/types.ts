@@ -43,6 +43,15 @@ export type ChatItem =
   | { type: 'thought'; id: string; text: string }
   | { type: 'tool'; id: string; card: ToolCard }
   | { type: 'error'; id: string; text: string }
+  | { type: 'ask'; id: string; message: string; schema: AskSchema; answer?: { action: 'accept' | 'decline' | 'cancel'; content?: Record<string, AskValue> } }
+
+/** Value of one answered form field. */
+export type AskValue = string | number | boolean | string[]
+/** JSON-schema subset omp sends with `elicitation/create` (form mode). */
+export interface AskSchema {
+  properties?: Record<string, { type: string; title?: string | null; description?: string | null; enum?: string[] | null; oneOf?: { const: string; title: string; description?: string | null }[] | null; items?: { enum?: string[]; anyOf?: { const: string; title: string; description?: string | null }[] }; default?: AskValue | null }>
+  required?: string[] | null
+}
 
 /** Session row in history. */
 export interface SessionRow { sessionId: string; title?: string; cwd: string; updatedAt?: string }
@@ -96,4 +105,5 @@ export type WebviewMessage =
   | { type: 'resetSetting'; key: string }
   | { type: 'findFiles'; query: string }
   | { type: 'fork'; tab: string }
+  | { type: 'answer'; tab: string; itemId: string; action: 'accept' | 'decline' | 'cancel'; content?: Record<string, AskValue> }
   | { type: 'rewind'; tab: string; itemId: string }

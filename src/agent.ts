@@ -8,7 +8,7 @@ import { Readable as NodeReadable, Writable as NodeWritable } from 'node:stream'
 import { client as createAcpClientApp, methods, ndJsonStream, PROTOCOL_VERSION } from '@agentclientprotocol/sdk'
 import { ompEnv } from './binary.ts'
 import { Transcript } from './transcript.ts'
-import type { ChatItem, SessionRow } from './types.ts'
+import type { AskSchema, AskValue, ChatItem, SessionRow } from './types.ts'
 
 type Rpc = { request: (method: string, params: unknown) => Promise<any>; notify: (method: string, params: unknown) => Promise<void> }
 
@@ -121,8 +121,30 @@ export class OmpSession {
     }
   }
 
+  /** Open questions from omp's `ask` tool, keyed by transcript item id. */
+  private asks = new Map<string, (r: { action: 'accept' | 'decline' | 'cancel'; content?: Record<string, AskValue> }) => void>()
+
+  /** @internal omp asked the user something; resolves when the form is answered. */
+  ask(message: string, schema: AskSchema): Promise<{ action: 'accept' | 'decline' | 'cancel'; content?: Record<string, AskValue> }> {
+    const item = this.transcript.ask(message, schema)
+    this.events.item(this, item)
+    return new Promise(resolve => this.asks.set(item.id, resolve))
+  }
+
+  /** The user answered (or skipped) question `itemId`. */
+  answer(itemId: string, action: 'accept' | 'decline' | 'cancel', content?: Record<string, AskValue>): void {
+    const resolve = this.asks.get(itemId)
+    const item = this.transcript.items.find(i => i.id === itemId)
+    if (resolve === undefined || item?.type !== 'ask') return
+    this.asks.delete(itemId)
+    item.answer = { action, ...content ? { content } : {} }
+    this.events.item(this, item)
+    resolve(item.answer)
+  }
+
   /** Stop the running turn and drop queued prompts. */
   cancel(): void {
+    for (const id of [...this.asks.keys()]) this.answer(id, 'cancel')
     this.queue = []
     void this.host.rpc().notify(methods.agent.session.cancel, { sessionId: this.id }).catch(() => {})
     this.events.state(this)
@@ -196,12 +218,18 @@ export class OmpHost {
         const chosen = await this.events.permission(this.sessions.get(params.sessionId), title, params.options.map(o => ({ optionId: o.optionId, name: o.name, kind: o.kind })))
         return chosen === undefined ? { outcome: { outcome: 'cancelled' as const } } : { outcome: { outcome: 'selected' as const, optionId: chosen } }
       })
+    app.onRequest(methods.client.elicitation.create, async ({ params }) => {
+      const p = params as { mode?: string; sessionId?: string; message: string; requestedSchema?: AskSchema }
+      const s = p.sessionId === undefined ? undefined : this.sessions.get(p.sessionId)
+      if (s === undefined || p.mode !== 'form' || p.requestedSchema === undefined) return { action: 'cancel' as const }
+      return await s.ask(p.message, p.requestedSchema) as never
+    })
     const connection = app.connect(ndJsonStream(
       NodeWritable.toWeb(child.stdin!) as WritableStream<Uint8Array>,
       NodeReadable.toWeb(child.stdout!) as ReadableStream<Uint8Array>,
     ))
     const rpc = connection.agent as unknown as Rpc
-    await rpc.request(methods.agent.initialize, { protocolVersion: PROTOCOL_VERSION, clientCapabilities: {} })
+    await rpc.request(methods.agent.initialize, { protocolVersion: PROTOCOL_VERSION, clientCapabilities: { elicitation: { form: {} } } })
     this.client = rpc
   }
 

@@ -218,6 +218,7 @@ class ChatViewProvider implements vscode.WebviewViewProvider {
           this.activate(session.id)
           return
         }
+        case 'answer': this.tab(m.tab)?.session.answer(m.itemId, m.action, m.content); return
         case 'rewind': await this.rewind(m.tab, m.itemId); return
         case 'loadSettings': await this.refreshSettings(); return
         case 'setSetting': this.writeSetting(m.key, m.value); return
