@@ -7,7 +7,10 @@ const inline = s => esc(s)
   .replace(/(^|[\s(])\*([^*\s][^*]*)\*/g, '$1<em>$2</em>')
   .replace(/\[([^\]]+)\]\((https?:[^)\s]+)\)/g, '<a href="$2">$1</a>')
   .replace(/(^|[\s(])((?:[A-Za-z]:)?[\w.@/\\-]+\.[A-Za-z0-9]{1,6})(?::(\d+))?(?=[\s).,;:]|$)/g,
-    (m, pre, p, line) => /[/\\]/.test(p) ? `${pre}<a class="file" data-path="${p}"${line ? ` data-line="${line}"` : ''}>${p}${line ? ':' + line : ''}</a>` : m)
+    // Unix-absolute paths (/home/…, /usr/…) come from servers or stack traces and never open here: leave them as text.
+    (m, pre, p, line) => /[/\\]/.test(p) && !p.startsWith('/') ? `${pre}<a class="file" data-path="${p}"${line ? ` data-line="${line}"` : ''}>${p}${line ? ':' + line : ''}</a>` : m)
+/** A pasted error/log with escaped newlines ("…\n    at foo (…)\n…") reads as one long line; show it as a block. */
+const escapedBlob = l => l.length > 160 && (l.match(/\\n/g) ?? []).length >= 3
 function md(src) {
   const out = []; const L = src.split('\n')
   for (let i = 0; i < L.length; i++) {
@@ -26,6 +29,11 @@ function md(src) {
       const cells = r => r.trim().slice(1, -1).split('|').map(c => c.trim())
       const body = rows.filter(r => !/^\|[\s:|-]+\|\s*$/.test(r))
       out.push(`<table>${body.map((r, n) => `<tr>${cells(r).map(c => n === 0 ? `<th>${inline(c)}</th>` : `<td>${inline(c)}</td>`).join('')}</tr>`).join('')}</table>`); continue
+    }
+    if (escapedBlob(l)) {
+      const text = l.replace(/\\n/g, '\n').replace(/\\t/g, '  ').replace(/\\"/g, '"')
+      out.push(`<div class="codeblock log"><button class="copy" title="Copy">Copy</button><pre><code>${esc(text)}</code></pre></div>`)
+      continue
     }
     if (/^>\s?/.test(l)) { out.push(`<blockquote>${inline(l.replace(/^>\s?/, ''))}</blockquote>`); continue }
     if (l.trim()) out.push(`<p>${inline(l)}</p>`)

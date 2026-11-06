@@ -584,3 +584,7 @@ code { font-size: 0.88em; }
 .find-count { font-size: 0.8em; min-width: 36px; text-align: right; font-variant-numeric: tabular-nums; }
 mark.hit { background: color-mix(in srgb, #f1fa8c 35%, transparent); color: inherit; border-radius: 2px; }
 mark.hit.cur { background: #f1fa8c; color: #1f2024; }
+
+/* escaped logs / stack traces pasted into a reply */
+.codeblock.log > pre { max-height: 280px; white-space: pre-wrap; word-break: break-word; font-size: 12px; }
+.msg p, .msg li { overflow-wrap: anywhere; }
