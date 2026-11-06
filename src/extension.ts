@@ -253,6 +253,13 @@ class ChatViewProvider implements vscode.WebviewViewProvider {
         case 'fork': {
           const t = this.tab(m.tab)
           if (t === undefined) return
+          // omp refuses to fork while a turn runs; offer to stop it first.
+          if (t.session.busy) {
+            const pick = await vscode.window.showWarningMessage('omp is still working in this chat. Stop the current turn and fork?', { modal: true }, 'Stop and fork')
+            if (pick !== 'Stop and fork') return
+            t.session.cancel()
+            for (let i = 0; i < 50 && t.session.busy; i++) await new Promise(r => setTimeout(r, 100))
+          }
           this.openPanel(await this.hosts.get(t.cwd)!.fork(t.session), t.cwd)
           return
         }
@@ -269,7 +276,9 @@ class ChatViewProvider implements vscode.WebviewViewProvider {
         case 'findFiles': reply({ type: 'files', query: m.query, files: await this.findFiles(m.query, this.tab(from)?.cwd) }); return
       }
     } catch (error) {
-      const text = String((error as Error)?.message ?? error)
+      const e = error as { message?: string; data?: unknown }
+      const detail = typeof e?.data === 'string' ? e.data : typeof (e?.data as { message?: unknown })?.message === 'string' ? (e.data as { message: string }).message : e?.data ? JSON.stringify(e.data) : ''
+      const text = [String(e?.message ?? error), detail].filter(Boolean).join(': ')
       this.output.appendLine(`${m.type}: ${text}`)
       void vscode.window.showErrorMessage(`Oh My Pi: ${text}`)
     }
