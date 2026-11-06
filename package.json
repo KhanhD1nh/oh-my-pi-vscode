@@ -2,7 +2,7 @@
   "name": "oh-my-pi",
   "displayName": "Oh My Pi",
   "description": "Chat with the omp coding agent inside VS Code: streaming replies, tool cards, diffs, model picker and every omp setting.",
-  "version": "0.21.2",
+  "version": "0.22.0",
   "publisher": "khanhd1nh",
   "license": "MIT",
   "repository": {
@@ -60,7 +60,11 @@
       },
       {
         "command": "ohMyPi.focus",
-        "title": "Oh My Pi: Focus Chat"
+        "title": "OMP: Open Chat",
+        "icon": {
+          "light": "media/pi-tab.svg",
+          "dark": "media/pi-tab.svg"
+        }
       },
       {
         "command": "ohMyPi.addSelection",
@@ -92,6 +96,11 @@
         }
       ],
       "editor/title": [
+        {
+          "command": "ohMyPi.focus",
+          "when": "config.ohMyPi.editorButton && activeWebviewPanelId != 'ohMyPi.panel'",
+          "group": "navigation@-100"
+        },
         {
           "command": "ohMyPi.newSession",
           "when": "activeWebviewPanelId == 'ohMyPi.panel'",
@@ -139,6 +148,16 @@
           "type": "boolean",
           "default": true,
           "description": "Check GitHub Releases once a day and offer to install a newer OMP extension."
+        },
+        "ohMyPi.editorButton": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show the π button on every editor title bar to open OMP beside it."
+        },
+        "ohMyPi.statusBarButton": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show an OMP button in the status bar (shows running chats)."
         }
       }
     }

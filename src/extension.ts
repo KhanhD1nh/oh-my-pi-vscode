@@ -42,9 +42,11 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand('ohMyPi.addSelection', () => provider.addSelection()),
     vscode.commands.registerCommand('ohMyPi.checkForUpdates', () => checkForUpdate(context, output, true)),
     vscode.window.onDidChangeActiveTextEditor(() => provider.folderMaybeChanged()),
+    vscode.workspace.onDidChangeConfiguration(e => { if (e.affectsConfiguration('ohMyPi.statusBarButton')) provider.updateStatusItem() }),
     vscode.workspace.onDidChangeWorkspaceFolders(() => provider.folderMaybeChanged()),
     { dispose: () => provider.dispose() },
   )
+  provider.updateStatusItem()
   // Daily, a minute after startup so it never slows activation.
   const t = setTimeout(() => { void checkForUpdate(context, output) }, 60_000)
   context.subscriptions.push({ dispose: () => clearTimeout(t) })
@@ -170,6 +172,7 @@ class ChatViewProvider implements vscode.WebviewViewProvider {
 
   /** Editor tab titles: braille spinner while omp works, ● when it finished out of sight. */
   private tickTitles(): void {
+    this.updateStatusItem()
     this.spinAt = (this.spinAt + 1) % SPIN.length
     for (const t of this.tabs) {
       const name = (t.session.title ?? 'New chat').replace(/\s+/gu, ' ').slice(0, 40)
@@ -181,7 +184,7 @@ class ChatViewProvider implements vscode.WebviewViewProvider {
   /** Open a chat panel for `session` next to the other chats (or beside the editor). */
   private openPanel(session: OmpSession, cwd: string, restored?: vscode.WebviewPanel): void {
     const media = vscode.Uri.joinPath(this.context.extensionUri, 'media')
-    const column = this.tab(this.active)?.panel.viewColumn ?? vscode.ViewColumn.Beside
+    const column = this.tab(this.active)?.panel.viewColumn ?? (vscode.window.activeTextEditor ? vscode.ViewColumn.Beside : vscode.ViewColumn.Active)
     const panel = restored ?? vscode.window.createWebviewPanel(PANEL_TYPE, session.title ?? 'New chat', { viewColumn: column, preserveFocus: false }, { enableScripts: true, retainContextWhenHidden: true, localResourceRoots: [media] })
     if (restored) panel.webview.options = { enableScripts: true, localResourceRoots: [media] }
     panel.iconPath = vscode.Uri.joinPath(media, 'pi-tab.svg')
@@ -262,7 +265,21 @@ class ChatViewProvider implements vscode.WebviewViewProvider {
   /** Ctrl+Alt+P: show the last chat, or start one. */
   focusChat(): void {
     const t = this.tab(this.active) ?? this.tabs.at(-1)
-    if (t) t.panel.reveal(); else void this.newTab()
+    if (t) t.panel.reveal(t.panel.viewColumn, false); else void this.newTab()
+  }
+
+  /** Status bar: "π OMP", or "⠋ OMP 2" while chats run; click opens the chat. */
+  readonly status = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100)
+  updateStatusItem(): void {
+    if (!vscode.workspace.getConfiguration('ohMyPi').get<boolean>('statusBarButton', true)) { this.status.hide(); this.status.text = ''; return }
+    const busy = this.tabs.filter(t => t.session.busy).length
+    const unread = this.tabs.filter(t => t.unread).length
+    const text = busy ? `$(loading~spin) OMP ${busy}` : unread ? `$(circle-filled) OMP` : '$(comment-discussion) OMP'
+    if (this.status.text === text) return // called on every spinner tick; touch the item only on change
+    this.status.text = text
+    this.status.tooltip = busy ? `${busy} chat(s) running — click to open` : unread ? 'A chat finished — click to open' : 'Open OMP chat (Ctrl+Alt+P)'
+    this.status.command = 'ohMyPi.focus'
+    this.status.show()
   }
 
   resolveWebviewView(view: vscode.WebviewView): void {
@@ -541,5 +558,5 @@ class ChatViewProvider implements vscode.WebviewViewProvider {
 <body data-mode="${mode}"${restore ? ` data-session="${encodeURIComponent(restore.sessionId)}" data-cwd="${encodeURIComponent(restore.cwd)}"` : ''}><div id="app"></div><script nonce="${nonce}" src="${script}"></script></body></html>`
   }
 
-  dispose(): void { clearInterval(this.spinner); for (const h of this.hosts.values()) h.dispose() }
+  dispose(): void { this.status.dispose(); clearInterval(this.spinner); for (const h of this.hosts.values()) h.dispose() }
 }
