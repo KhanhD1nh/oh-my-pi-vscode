@@ -515,7 +515,7 @@ send({ type: 'ready' })
 
 /** Tab icon: π; while running, 3 dots orbit in a small circle to its right. */
 function piIcon(t) {
-  const pi = svg('<path d="M3.6 5H12.4M6.2 5V12M9.8 5V11Q9.8 12 11 12" stroke-width="1.7"/>')
+  const pi = svg('<path fill="currentColor" stroke="none" transform="scale(.6667)" d="M3 6.5C3 5.1 4.1 4 5.5 4H20a1.5 1.5 0 0 1 0 3h-3v8.5c0 .6.4 1 1 1 .4 0 .7-.2 1-.4a1.4 1.4 0 0 1 2 2c-.8.8-1.9 1.3-3 1.3-2.3 0-4-1.6-4-3.9V7H10v12.5a1.5 1.5 0 0 1-3 0V7h-1.5c-.8 0-1.5.7-1.5 1.5a1.5 1.5 0 0 1-3 0v-2Z"/>')
   pi.setAttribute('class', `tab-ico${t.busy ? ' busy' : ''}${t.unread ? ' unread' : ''}`)
   if (!t.busy) return pi
   const dots = svg('<circle cx="8" cy="3" r="2"/><circle cx="12.33" cy="10.5" r="2"/><circle cx="3.67" cy="10.5" r="2"/>')

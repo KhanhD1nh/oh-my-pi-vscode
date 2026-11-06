@@ -276,3 +276,10 @@ svg.tab-orbit circle { fill: currentColor; stroke: none; }
 .tab-x { display: inline-flex; align-items: center; justify-content: center; padding: 0; }
 .tab-x svg { width: 12px; height: 12px; display: block; }
 svg.tab-ico { display: block; }
+
+/* π: omp logo glyph, never spins; omp purple. Only the 3 dots move while running. */
+.tab-ico.busy, svg.tab-ico.busy { animation: none; color: #bd93f9; }
+svg.tab-ico { color: #bd93f9; opacity: .55; }
+svg.tab-ico.busy, svg.tab-ico.unread, .tabchip.on svg.tab-ico { opacity: 1; }
+svg.tab-orbit { color: #bd93f9; }
+svg.tab-ico.unread { color: #bd93f9; }
