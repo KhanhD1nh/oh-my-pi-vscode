@@ -632,3 +632,6 @@ mark.hit.cur { background: var(--omp-yellow); color: #1f2024; }
 #input:focus-visible { outline: none; }
 .composer:has(#input:focus-visible) { border-color: var(--vscode-focusBorder); box-shadow: 0 0 0 1px var(--vscode-focusBorder); }
 button:focus-visible, .chip-btn:focus-visible, .menu-item:focus-visible, .tabchip:focus-visible { outline: 1px solid var(--vscode-focusBorder); outline-offset: 1px; }
+
+/* The Working line is plain text now; the braille spinner next to it is the only moving thing. */
+.working-label { color: var(--muted); }

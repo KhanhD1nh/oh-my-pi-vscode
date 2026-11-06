@@ -34,8 +34,14 @@ function statusLine() {
     seg('rate', '⚡', rate ? `${rate} tok/s` : t.stats?.apiMs ? `${(t.stats.output / (t.stats.apiMs / 1000)).toFixed(1)} tok/s` : '', rate ? 'Output speed now (estimated)' : 'Average model speed (omp session)'),
     seg('cost', '', (u.cost ?? t.stats?.cost) ? `${(u.cost ?? t.stats.cost).toFixed((u.cost ?? t.stats.cost) < 1 ? 4 : 2)}` : '', 'Session cost (omp)'))
 }
-function refreshStatus() { const el = document.getElementById('statusline'); if (el) el.replaceWith(statusLine()) }
-setInterval(() => { if (S.view === 'chat') refreshStatus() }, 1000)
+/** Rebuild the status line only when what it shows changed (it is asked every second). */
+function refreshStatus() {
+  const el = document.getElementById('statusline'); if (!el) return
+  const fresh = statusLine()
+  if (fresh.textContent === el.textContent && fresh.innerHTML === el.innerHTML) return
+  el.replaceWith(fresh)
+}
+EVERY_SECOND.push(() => { if (S.view === 'chat') refreshStatus() })
 
 
 /** Subagents still running and background services started in this chat. */
@@ -58,7 +64,7 @@ function bgChip() {
   return h('button', { class: `chip-btn jobs${S.menu === 'jobs' ? ' open' : ''}`, title: 'Subagents and background jobs', onclick: () => openMenu('jobs') }, agents.length ? runDot() : h('span', { class: 'live busy' }), h('span', { class: 'label' }, label))
 }
 // live timers on running agent cards
-setInterval(() => { for (const el of document.querySelectorAll('[data-t0]')) if (el.dataset.t0) el.textContent = since(Number(el.dataset.t0)) }, 1000)
+EVERY_SECOND.push(() => { for (const el of document.querySelectorAll('[data-t0]')) if (el.dataset.t0) { const v = since(Number(el.dataset.t0)); if (el.textContent !== v) el.textContent = v } })
 
 
 /** Open/close one subagent row; while open and running, re-read its log every 2s. */
@@ -70,6 +76,7 @@ function toggleAgent(k, toolId, name, cardKey) {
     const ask = () => send({ type: 'agentSteps', tab: S.active, toolId, name })
     ask()
     agentPolls.set(k, setInterval(() => {
+      if (document.hidden) return // no log reads for a chat nobody is looking at
       const it = items().find(x => x.id === cardKey)
       if (!S.open.has(k) || !it || (it.card.status !== 'pending' && it.card.status !== 'in_progress')) { clearInterval(agentPolls.get(k)); agentPolls.delete(k); if (S.open.has(k)) ask() }
       else ask()

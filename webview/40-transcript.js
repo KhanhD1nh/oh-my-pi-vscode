@@ -33,10 +33,44 @@ function itemBody(it) {
 function upsertNode(it) {
   if (!transcriptEl) return
   transcriptEl.querySelector('.empty')?.remove()
-  const fresh = itemNode(it)
   const old = nodes.get(it.id)
+  // Streaming text: swap only the message body's HTML instead of rebuilding the step (keeps the node, its
+  // classes and listeners; the browser re-lays out one block, not the whole step).
+  if (old && it.type === 'assistant') {
+    const body = old.querySelector(':scope > .msg')
+    if (body) { const html = md(it.text); if (body.innerHTML !== html) body.innerHTML = html; return }
+  }
+  const fresh = itemNode(it)
   if (old) old.replaceWith(fresh); else { fresh.classList.add('enter'); transcriptEl.insertBefore(fresh, transcriptEl.querySelector('.working')) }
   nodes.set(it.id, fresh)
+}
+/** Upserts arriving within one frame are applied together: one layout per frame however fast tokens come. */
+const frameQueue = new Map()
+let frameScheduled = false
+/** Streaming text is shown at most this often; new steps (tools, cards, prompts) still show at once. */
+const STREAM_MS = 80
+let lastFlush = 0
+function queueUpsert(it, after) {
+  frameQueue.set(it.id, { it, after })
+  if (frameScheduled) return
+  frameScheduled = true
+  const streaming = it.type === 'assistant' || it.type === 'thought'
+  const wait = streaming ? Math.max(0, STREAM_MS - (performance.now() - lastFlush)) : 0
+  // rAF never fires in a hidden page; the timer path keeps a backgrounded chat current for when it is shown.
+  setTimeout(() => { if (document.hidden) flushFrame(); else requestAnimationFrame(flushFrame) }, wait)
+}
+function flushFrame() {
+  if (!frameScheduled) return
+  frameScheduled = false
+  lastFlush = performance.now()
+  const batch = [...frameQueue.values()]; frameQueue.clear()
+  if (!batch.length) return
+  // One layout read before writing and none after: no forced synchronous layout per token.
+  const t = transcriptEl
+  const near = !t || t.scrollHeight - t.scrollTop - t.clientHeight < 80
+  for (const { it } of batch) upsertNode(it)
+  for (const { after } of batch) after?.()
+  if (t && near) requestAnimationFrame(() => { t.scrollTop = t.scrollHeight })
 }
 function stickBottom(fn) {
   const t = transcriptEl; const near = !t || t.scrollHeight - t.scrollTop - t.clientHeight < 80
@@ -58,5 +92,5 @@ function renderWorking() {
   if (!transcriptEl) return
   transcriptEl.querySelector('.working')?.remove()
   const t = tab()
-  if (t.busy) { transcriptEl.append(h('div', { class: 'working' }, h('span', { class: 'work-ico', 'aria-hidden': 'true' }, h('span', { class: 'tab-spin spin-main' }, SPIN[spinAt])), h('span', { class: 'working-label shimmer' }), t.queued ? h('span', { class: 'muted' }, ` · ${t.queued} queued`) : null)); updateWorking() }
+  if (t.busy) { transcriptEl.append(h('div', { class: 'working' }, h('span', { class: 'work-ico', 'aria-hidden': 'true' }, h('span', { class: 'tab-spin spin-main' }, SPIN[spinAt])), h('span', { class: 'working-label' }), t.queued ? h('span', { class: 'muted' }, ` · ${t.queued} queued`) : null)); updateWorking() }
 }

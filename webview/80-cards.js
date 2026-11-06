@@ -27,12 +27,25 @@ document.addEventListener('click', e => { if (S.userMenu && !e.target.closest('.
 // nothing is running.
 const SPIN = '⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏'
 let spinAt = 0
-setInterval(() => {
+/**
+ * Every periodic UI update goes through this one ticker: spinner (each tick), clocks and status (once a
+ * second). It stops while the page is hidden — a background chat tab or a collapsed panel costs nothing —
+ * and catches up in one go when shown again.
+ */
+const EVERY_SECOND = []
+let tickN = 0, ticker = null
+function tick() {
+  tickN++
   const live = document.querySelectorAll('.tab-spin.spin-main')
-  if (live.length === 0) return
-  spinAt = (spinAt + 1) % SPIN.length
-  for (const el of live) el.textContent = SPIN[spinAt]
-}, 100)
+  if (live.length) { spinAt = (spinAt + 1) % SPIN.length; for (const el of live) el.textContent = SPIN[spinAt] }
+  if (tickN % 10 === 0) for (const f of EVERY_SECOND) f()
+}
+function setTicker(on) {
+  if (on && !ticker) { ticker = setInterval(tick, 100); for (const f of EVERY_SECOND) f() }
+  if (!on && ticker) { clearInterval(ticker); ticker = null }
+}
+document.addEventListener('visibilitychange', () => setTicker(!document.hidden))
+setTicker(!document.hidden)
 /** Still marker for secondary "running" places (subagent rows, goal bar, chips). */
 function runDot() { return h('span', { class: 'run-dot', 'aria-hidden': 'true' }) }
 

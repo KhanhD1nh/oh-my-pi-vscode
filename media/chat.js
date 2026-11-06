@@ -242,10 +242,44 @@ function itemBody(it) {
 function upsertNode(it) {
   if (!transcriptEl) return
   transcriptEl.querySelector('.empty')?.remove()
-  const fresh = itemNode(it)
   const old = nodes.get(it.id)
+  // Streaming text: swap only the message body's HTML instead of rebuilding the step (keeps the node, its
+  // classes and listeners; the browser re-lays out one block, not the whole step).
+  if (old && it.type === 'assistant') {
+    const body = old.querySelector(':scope > .msg')
+    if (body) { const html = md(it.text); if (body.innerHTML !== html) body.innerHTML = html; return }
+  }
+  const fresh = itemNode(it)
   if (old) old.replaceWith(fresh); else { fresh.classList.add('enter'); transcriptEl.insertBefore(fresh, transcriptEl.querySelector('.working')) }
   nodes.set(it.id, fresh)
+}
+/** Upserts arriving within one frame are applied together: one layout per frame however fast tokens come. */
+const frameQueue = new Map()
+let frameScheduled = false
+/** Streaming text is shown at most this often; new steps (tools, cards, prompts) still show at once. */
+const STREAM_MS = 80
+let lastFlush = 0
+function queueUpsert(it, after) {
+  frameQueue.set(it.id, { it, after })
+  if (frameScheduled) return
+  frameScheduled = true
+  const streaming = it.type === 'assistant' || it.type === 'thought'
+  const wait = streaming ? Math.max(0, STREAM_MS - (performance.now() - lastFlush)) : 0
+  // rAF never fires in a hidden page; the timer path keeps a backgrounded chat current for when it is shown.
+  setTimeout(() => { if (document.hidden) flushFrame(); else requestAnimationFrame(flushFrame) }, wait)
+}
+function flushFrame() {
+  if (!frameScheduled) return
+  frameScheduled = false
+  lastFlush = performance.now()
+  const batch = [...frameQueue.values()]; frameQueue.clear()
+  if (!batch.length) return
+  // One layout read before writing and none after: no forced synchronous layout per token.
+  const t = transcriptEl
+  const near = !t || t.scrollHeight - t.scrollTop - t.clientHeight < 80
+  for (const { it } of batch) upsertNode(it)
+  for (const { after } of batch) after?.()
+  if (t && near) requestAnimationFrame(() => { t.scrollTop = t.scrollHeight })
 }
 function stickBottom(fn) {
   const t = transcriptEl; const near = !t || t.scrollHeight - t.scrollTop - t.clientHeight < 80
@@ -267,7 +301,7 @@ function renderWorking() {
   if (!transcriptEl) return
   transcriptEl.querySelector('.working')?.remove()
   const t = tab()
-  if (t.busy) { transcriptEl.append(h('div', { class: 'working' }, h('span', { class: 'work-ico', 'aria-hidden': 'true' }, h('span', { class: 'tab-spin spin-main' }, SPIN[spinAt])), h('span', { class: 'working-label shimmer' }), t.queued ? h('span', { class: 'muted' }, ` · ${t.queued} queued`) : null)); updateWorking() }
+  if (t.busy) { transcriptEl.append(h('div', { class: 'working' }, h('span', { class: 'work-ico', 'aria-hidden': 'true' }, h('span', { class: 'tab-spin spin-main' }, SPIN[spinAt])), h('span', { class: 'working-label' }), t.queued ? h('span', { class: 'muted' }, ` · ${t.queued} queued`) : null)); updateWorking() }
 }
 
 // Chat view, composer, menus (model, mode, add, slash, files), history / sidebar.
@@ -794,7 +828,7 @@ window.addEventListener('message', ({ data: m }) => {
       const i = list.findIndex(x => x.id === m.item.id)
       trackStream(m.tab, m.item, i >= 0 ? list[i].text?.length : 0)
       if (i >= 0) list[i] = m.item; else list.push(m.item)
-      if (m.tab === S.active && S.view === 'chat') { stickBottom(() => upsertNode(m.item)); updateWorking(); if (m.item.card?.todo) refreshTodo() }
+      if (m.tab === S.active && S.view === 'chat') queueUpsert(m.item, () => { updateWorking(); if (m.item.card?.todo) refreshTodo() })
       return
     }
     case 'files': if (S.menu === 'files' && m.query === S.fileQuery) { S.files = m.files; S.menuIndex = 0; refreshComposer() } return
@@ -860,12 +894,25 @@ document.addEventListener('click', e => { if (S.userMenu && !e.target.closest('.
 // nothing is running.
 const SPIN = '⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏'
 let spinAt = 0
-setInterval(() => {
+/**
+ * Every periodic UI update goes through this one ticker: spinner (each tick), clocks and status (once a
+ * second). It stops while the page is hidden — a background chat tab or a collapsed panel costs nothing —
+ * and catches up in one go when shown again.
+ */
+const EVERY_SECOND = []
+let tickN = 0, ticker = null
+function tick() {
+  tickN++
   const live = document.querySelectorAll('.tab-spin.spin-main')
-  if (live.length === 0) return
-  spinAt = (spinAt + 1) % SPIN.length
-  for (const el of live) el.textContent = SPIN[spinAt]
-}, 100)
+  if (live.length) { spinAt = (spinAt + 1) % SPIN.length; for (const el of live) el.textContent = SPIN[spinAt] }
+  if (tickN % 10 === 0) for (const f of EVERY_SECOND) f()
+}
+function setTicker(on) {
+  if (on && !ticker) { ticker = setInterval(tick, 100); for (const f of EVERY_SECOND) f() }
+  if (!on && ticker) { clearInterval(ticker); ticker = null }
+}
+document.addEventListener('visibilitychange', () => setTicker(!document.hidden))
+setTicker(!document.hidden)
 /** Still marker for secondary "running" places (subagent rows, goal bar, chips). */
 function runDot() { return h('span', { class: 'run-dot', 'aria-hidden': 'true' }) }
 
@@ -975,8 +1022,14 @@ function statusLine() {
     seg('rate', '⚡', rate ? `${rate} tok/s` : t.stats?.apiMs ? `${(t.stats.output / (t.stats.apiMs / 1000)).toFixed(1)} tok/s` : '', rate ? 'Output speed now (estimated)' : 'Average model speed (omp session)'),
     seg('cost', '', (u.cost ?? t.stats?.cost) ? `${(u.cost ?? t.stats.cost).toFixed((u.cost ?? t.stats.cost) < 1 ? 4 : 2)}` : '', 'Session cost (omp)'))
 }
-function refreshStatus() { const el = document.getElementById('statusline'); if (el) el.replaceWith(statusLine()) }
-setInterval(() => { if (S.view === 'chat') refreshStatus() }, 1000)
+/** Rebuild the status line only when what it shows changed (it is asked every second). */
+function refreshStatus() {
+  const el = document.getElementById('statusline'); if (!el) return
+  const fresh = statusLine()
+  if (fresh.textContent === el.textContent && fresh.innerHTML === el.innerHTML) return
+  el.replaceWith(fresh)
+}
+EVERY_SECOND.push(() => { if (S.view === 'chat') refreshStatus() })
 
 
 /** Subagents still running and background services started in this chat. */
@@ -999,7 +1052,7 @@ function bgChip() {
   return h('button', { class: `chip-btn jobs${S.menu === 'jobs' ? ' open' : ''}`, title: 'Subagents and background jobs', onclick: () => openMenu('jobs') }, agents.length ? runDot() : h('span', { class: 'live busy' }), h('span', { class: 'label' }, label))
 }
 // live timers on running agent cards
-setInterval(() => { for (const el of document.querySelectorAll('[data-t0]')) if (el.dataset.t0) el.textContent = since(Number(el.dataset.t0)) }, 1000)
+EVERY_SECOND.push(() => { for (const el of document.querySelectorAll('[data-t0]')) if (el.dataset.t0) { const v = since(Number(el.dataset.t0)); if (el.textContent !== v) el.textContent = v } })
 
 
 /** Open/close one subagent row; while open and running, re-read its log every 2s. */
@@ -1011,6 +1064,7 @@ function toggleAgent(k, toolId, name, cardKey) {
     const ask = () => send({ type: 'agentSteps', tab: S.active, toolId, name })
     ask()
     agentPolls.set(k, setInterval(() => {
+      if (document.hidden) return // no log reads for a chat nobody is looking at
       const it = items().find(x => x.id === cardKey)
       if (!S.open.has(k) || !it || (it.card.status !== 'pending' && it.card.status !== 'in_progress')) { clearInterval(agentPolls.get(k)); agentPolls.delete(k); if (S.open.has(k)) ask() }
       else ask()

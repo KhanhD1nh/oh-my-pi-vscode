@@ -64,7 +64,7 @@ window.addEventListener('message', ({ data: m }) => {
       const i = list.findIndex(x => x.id === m.item.id)
       trackStream(m.tab, m.item, i >= 0 ? list[i].text?.length : 0)
       if (i >= 0) list[i] = m.item; else list.push(m.item)
-      if (m.tab === S.active && S.view === 'chat') { stickBottom(() => upsertNode(m.item)); updateWorking(); if (m.item.card?.todo) refreshTodo() }
+      if (m.tab === S.active && S.view === 'chat') queueUpsert(m.item, () => { updateWorking(); if (m.item.card?.todo) refreshTodo() })
       return
     }
     case 'files': if (S.menu === 'files' && m.query === S.fileQuery) { S.files = m.files; S.menuIndex = 0; refreshComposer() } return
