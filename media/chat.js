@@ -1271,6 +1271,7 @@ function planApproval(it) {
         no ? h('button', { class: 'ask-skip', onclick: () => answer(no) }, 'Keep planning') : null))
 }
 function askEl(it) {
+  if (it.hold === 'ssh') return h('div', { class: 'notice' }, h('span', { class: 'notice-ico', 'aria-hidden': 'true' }, it.answer ? '✓' : '🔑'), it.answer ? 'SSH key loaded — omp continues' : 'omp is waiting for you to unlock the SSH key (box above the input)')
   const plan = planApproval(it)
   if (plan) return plan
   const props = Object.entries(it.schema.properties ?? {})

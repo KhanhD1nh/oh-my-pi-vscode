@@ -318,7 +318,7 @@ export class ChatProvider implements vscode.WebviewViewProvider {
       const s = t.session
       if (!s.autopilot.pinned) s.autopilot.enabled = on
       s.autopilot.maxContinues = cfg.get<number>('autopilot.maxContinues', 5)
-      if (!s.autopilot.enabled || !s.busy) continue
+      if (!s.autopilot.enabled || !s.busy || s.waitingForKey) continue
       const w = longWait(s.transcript.items, now, stallMs)
       if (w === undefined || this.nudged.has(w.id)) continue
       const running = (await sessionJobs(t.cwd, s.id).catch(() => [])).filter(j => j.status === 'running' && j.type !== 'task').length

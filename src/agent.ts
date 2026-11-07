@@ -36,6 +36,13 @@ export interface HostEvents extends SessionEvents {
   log(line: string): void
 }
 
+/** Question omp is told to ask while it waits for your SSH key. */
+export const KEY_QUESTION = 'Waiting for you to unlock the SSH key — continue when it is loaded?'
+function isKeyQuestion(message: string, schema: AskSchema): boolean {
+  const text = [message, ...Object.values(schema.properties ?? {}).map(p => `${p.title ?? ''} ${p.description ?? ''}`)].join(' ')
+  return /ssh key|unlock/iu.test(text)
+}
+
 /** One omp session (one UI tab). */
 export class OmpSession {
   transcript = new Transcript()
@@ -86,7 +93,7 @@ export class OmpSession {
         // The background `/rename` turn only echoes "Session renamed to …"; keep it out of the chat.
         if (this.renaming) return
         const item = this.transcript.apply(update)
-        if (item !== undefined) this.events.item(this, item)
+        if (item !== undefined) { this.events.item(this, item); this.holdForKey(item) }
       }
     }
   }
@@ -147,6 +154,7 @@ export class OmpSession {
         this.events.item(this, this.transcript.error(String((error as Error)?.message ?? error)))
       } finally {
         this.busy = false
+        this.waitingForKey = false
         this.events.state(this)
       }
       if (!this.named && this.queue.length === 0) void this.nameSession()
@@ -165,6 +173,42 @@ export class OmpSession {
     this.events.item(this, this.transcript.notice(`Autopilot: ${open.length} todo item${open.length > 1 ? 's' : ''} still open — continuing (${a.continues}/${a.maxContinues})`))
     this.queue.push({ text: continuePrompt(open), images: [], goal: true })
     void this.drain()
+  }
+
+  /** SSH cards already told to wait for your passphrase (once per card). */
+  private readonly heldForKey = new Set<string>()
+  /** omp was told to wait for your SSH passphrase; the stall watchdog leaves that wait alone. */
+  waitingForKey = false
+  /** The ask omp opened to hold its turn for the key, answered by `keyLoaded()`. */
+  private keyAsk: string | undefined
+  /** The key is in ssh-agent: release the held turn (or tell omp, if it did not hold). @returns true if a held ask was answered. */
+  keyLoaded(): boolean {
+    this.waitingForKey = false
+    const id = this.keyAsk; this.keyAsk = undefined
+    if (id === undefined || !this.asks.has(id)) return false
+    const item = this.transcript.items.find(i => i.id === id)
+    const field = item?.type === 'ask' ? Object.keys(item.schema.properties ?? {})[0] : undefined
+    this.answer(id, 'accept', field ? { [field]: 'Loaded' } : undefined)
+    return true
+  }
+  /**
+   * A bash call failed for want of an unlocked SSH key: tell the running turn to wait for you instead of
+   * reporting failure. The unlock box sends "key loaded" into the same turn, which ends that wait.
+   */
+  private holdForKey(item: ChatItem): void {
+    if (item.type !== 'tool' || !this.busy || !this.host.steering) return
+    const c = item.card
+    if (c.status !== 'failed' && c.status !== 'completed') return
+    if (!c.needsInput || !/ssh/iu.test(c.needsInput) || this.heldForKey.has(c.id)) return
+    this.heldForKey.add(c.id)
+    this.waitingForKey = true
+    this.events.item(this, this.transcript.notice('SSH key locked — told omp to wait while you unlock it above the input'))
+    void this.host.rpc().request('_session/steering', { sessionId: this.id, prompt: [{ type: 'text', text: [
+      'The SSH command failed only because my SSH key is locked. I am unlocking it now in the editor (it asks me for the passphrase).',
+      'Do NOT report the failure and do NOT end your turn. Instead call the ask tool once with exactly this question:',
+      `"${KEY_QUESTION}" and one option "Loaded". That call blocks until the key is in ssh-agent.`,
+      'When it returns, retry the same command with the default ssh-agent (do not set SSH_AUTH_SOCK) and continue the task.',
+    ].join(' ') }] }).catch(() => {})
   }
 
   /** Autopilot: tell the running turn to stop a wait that will never return. */
@@ -269,6 +313,7 @@ export class OmpSession {
 
   ask(message: string, schema: AskSchema): Promise<{ action: 'accept' | 'decline' | 'cancel'; content?: Record<string, AskValue> }> {
     const item = this.transcript.ask(message, schema)
+    if (this.waitingForKey && isKeyQuestion(message, schema)) { this.keyAsk = item.id; if (item.type === 'ask') item.hold = 'ssh' }
     this.events.item(this, item)
     return new Promise(resolve => this.asks.set(item.id, resolve))
   }

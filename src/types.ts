@@ -61,11 +61,14 @@ export type ChatItem =
   /** Something the extension did on its own (autopilot), shown as a small line. */
   | { type: 'notice'; id: string; text: string; at?: number }
   | { type: 'permission'; id: string; title: string; options: { optionId: string; name: string; kind: string }[]; chosen?: string }
-  | { type: 'ask'; id: string; message: string; schema: AskSchema; answer?: { action: 'accept' | 'decline' | 'cancel'; content?: Record<string, AskValue> } }
+  | { type: 'ask'; id: string; message: string; schema: AskSchema; hold?: AskHold; answer?: { action: 'accept' | 'decline' | 'cancel'; content?: Record<string, AskValue> } }
 
 /** Value of one answered form field. */
 export type AskValue = string | number | boolean | string[]
 /** JSON-schema subset omp sends with `elicitation/create` (form mode). */
+/** An ask the extension answers itself ("ssh": released when the SSH key is unlocked). */
+export type AskHold = 'ssh'
+
 export interface AskSchema {
   properties?: Record<string, { type: string; title?: string | null; description?: string | null; enum?: string[] | null; oneOf?: { const: string; title: string; description?: string | null }[] | null; items?: { enum?: string[]; anyOf?: { const: string; title: string; description?: string | null }[] }; default?: AskValue | null }>
   required?: string[] | null
