@@ -1275,40 +1275,68 @@ function askEl(it) {
   if (it.hold === 'ssh') return h('div', { class: 'notice' }, h('span', { class: 'notice-ico', 'aria-hidden': 'true' }, it.answer ? '✓' : '🔑'), it.answer ? 'SSH key loaded — omp continues' : 'omp is waiting for you to unlock the SSH key (box above the input)')
   const plan = planApproval(it)
   if (plan) return plan
-  const props = Object.entries(it.schema.properties ?? {})
+  // omp adds "<id>__other" free-text fields next to each choice question; they render as an "Other" box
+  const all = Object.entries(it.schema.properties ?? {})
+  const props = all.filter(([k]) => !k.endsWith('__other'))
+  const other = k => all.find(([o]) => o === k + '__other')
   const opts = p => p.oneOf?.map(o => ({ v: o.const, t: o.title, d: o.description })) ?? p.enum?.map(v => ({ v, t: v })) ?? p.items?.anyOf?.map(o => ({ v: o.const, t: o.title, d: o.description })) ?? p.items?.enum?.map(v => ({ v, t: v })) ?? null
-  if (it.answer) {
-    const c = it.answer.content ?? {}
-    const label = (p, v) => (opts(p) ?? []).find(o => o.v === v)?.t ?? String(v)
-    return h('div', { class: 'ask done' }, h('div', { class: 'ask-msg', html: md(it.message) }),
-      it.answer.action !== 'accept' ? h('div', { class: 'muted' }, 'Skipped') :
-        props.map(([k, p]) => h('div', { class: 'ask-ans' }, h('span', { class: 'muted' }, (p.title || k) + ': '), [c[k]].flat().map(v => label(p, v)).join(', '))))
-  }
+  const done = !!it.answer
+  const c = it.answer?.content ?? {}
   const val = {}
-  for (const [k, p] of props) if (p.default != null) val[k] = p.default
-  const submit = h('button', { class: 'ask-submit', onclick: () => send({ type: 'answer', tab: S.active, itemId: it.id, action: 'accept', content: val }) }, 'Submit')
-  const check = () => { submit.disabled = (it.schema.required ?? []).some(k => val[k] === undefined || val[k] === '' || (Array.isArray(val[k]) && !val[k].length)) }
-  const fields = props.map(([k, p], qi) => {
+  if (!done) for (const [k, p] of all) if (p.default != null) val[k] = p.default
+  const n = props.length
+  const key = 'ask:' + it.id
+  // answered cards can fold to their header; open ones are always shown
+  const open = !done || !S.open.has(key)
+  const status = done ? (it.answer.action === 'accept' ? 'Answered' : 'Skipped') : 'Waiting for your answer'
+  const toggle = () => { S.open.has(key) ? S.open.delete(key) : S.open.add(key); upsertNode(it) }
+  const head = h('div', { class: 'q-head', ...done ? { role: 'button', tabindex: '0', 'aria-expanded': open ? 'true' : 'false', onclick: toggle, onkeydown: e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle() } } } : {} },
+    h('div', { class: 'q-title' }, 'Question'),
+    h('div', { class: 'q-sub' }, status + ' · ' + n + ' question' + (n === 1 ? '' : 's'), done ? h('span', { class: 'q-chev' + (open ? ' open' : '') }, '⌃') : null))
+  if (!open) return h('div', { class: 'q done' }, head)
+  const submit = done ? null : h('button', { class: 'ask-submit', onclick: () => send({ type: 'answer', tab: S.active, itemId: it.id, action: 'accept', content: val }) }, 'Submit')
+  const check = () => { if (submit) submit.disabled = (it.schema.required ?? []).some(k => val[k] === undefined || val[k] === '' || (Array.isArray(val[k]) && !val[k].length)) && !props.some(([k]) => val[k + '__other']) }
+  const blocks = props.map(([k, p], qi) => {
     const o = opts(p)
-    const head = h('div', { class: 'ask-q' }, props.length > 1 ? h('span', { class: 'ask-n' }, String(qi + 1)) : null, p.title || k)
-    const desc = p.description ? h('div', { class: 'ask-d' }, p.description) : null
+    const chosen = done ? [c[k]].flat().filter(v => v !== undefined) : null
+    const isRec = v => p.default != null && v === p.default && !/recommended/iu.test(String((o ?? []).find(x => x.v === v)?.t ?? ''))
     let body
-    if (o && p.type === 'array') {
-      val[k] ??= []
-      body = o.map(x => h('label', { class: 'ask-opt' }, h('input', { type: 'checkbox', onchange: e => { val[k] = e.target.checked ? [...val[k], x.v] : val[k].filter(v => v !== x.v); check() } }), h('span', {}, h('b', {}, x.t), x.d ? h('small', {}, x.d) : null)))
-    } else if (o) {
-      body = o.map((x, i) => h('label', { class: 'ask-opt' }, h('input', { type: 'radio', name: it.id + k, ...val[k] === x.v ? { checked: true } : {}, onchange: () => { val[k] = x.v; check() } }), h('span', { class: 'ask-key' }, String.fromCharCode(65 + i)), h('span', {}, h('b', {}, x.t), x.d ? h('small', {}, x.d) : null)))
+    if (o) {
+      const multi = p.type === 'array'
+      if (multi && !done) val[k] ??= []
+      body = h('div', { class: 'q-opts', role: multi ? 'group' : 'radiogroup', 'aria-label': p.title || k }, o.map(x => {
+        const on = done ? chosen.includes(x.v) : multi ? val[k].includes(x.v) : val[k] === x.v
+        return h('label', { class: 'q-opt' + (on ? ' on' : '') + (done ? ' ro' : '') },
+          h('input', { type: multi ? 'checkbox' : 'radio', name: it.id + k, ...on ? { checked: true } : {}, ...done ? { disabled: true } : {},
+            onchange: e => {
+              if (multi) val[k] = e.target.checked ? [...val[k], x.v] : val[k].filter(v => v !== x.v); else val[k] = x.v
+              check()
+              e.target.closest('.q-opts').querySelectorAll('.q-opt').forEach(l => l.classList.toggle('on', l.querySelector('input').checked))
+            } }),
+          h('span', { class: 'q-opt-text' }, h('b', {}, x.t, isRec(x.v) ? ' (Recommended)' : null), x.d ? h('small', {}, x.d) : null))
+      }))
     } else if (p.type === 'boolean') {
-      val[k] ??= false
-      body = h('label', { class: 'ask-opt' }, h('input', { type: 'checkbox', ...val[k] ? { checked: true } : {}, onchange: e => { val[k] = e.target.checked; check() } }), h('span', {}, 'Yes'))
+      if (!done) val[k] ??= false
+      const on = done ? !!c[k] : val[k]
+      body = h('label', { class: 'q-opt' + (on ? ' on' : '') + (done ? ' ro' : '') }, h('input', { type: 'checkbox', ...on ? { checked: true } : {}, ...done ? { disabled: true } : {}, onchange: e => { val[k] = e.target.checked; check() } }), h('span', { class: 'q-opt-text' }, h('b', {}, 'Yes')))
     } else {
-      body = h('textarea', { class: 'field ask-text', rows: 2, placeholder: 'Type your answer…', oninput: e => { val[k] = p.type === 'number' || p.type === 'integer' ? Number(e.target.value) : e.target.value; check() } })
+      body = done ? h('div', { class: 'q-text-ans' }, String(c[k] ?? '—')) : h('textarea', { class: 'field ask-text', rows: 2, placeholder: 'Type your answer…', oninput: e => { val[k] = p.type === 'number' || p.type === 'integer' ? Number(e.target.value) : e.target.value; check() } })
     }
-    return h('div', { class: 'ask-field' }, head, desc, body)
+    const ot = other(k)
+    const otherBox = !ot ? null : done ? (c[ot[0]] ? h('div', { class: 'q-text-ans' }, h('span', { class: 'muted' }, 'Other: '), String(c[ot[0]])) : null)
+      : h('input', { type: 'text', class: 'field q-other', placeholder: 'Other — type your own answer', oninput: e => { val[ot[0]] = e.target.value; check() } })
+    return h('div', { class: 'q-block' },
+      h('div', { class: 'q-question' }, n > 1 ? h('span', { class: 'ask-n' }, String(qi + 1)) : null, p.title || k),
+      p.description && p.description !== p.title ? h('div', { class: 'ask-d' }, p.description) : null,
+      body, otherBox)
   })
   queueMicrotask(check)
-  return h('div', { class: 'ask' }, h('div', { class: 'ask-msg', html: md(it.message) }), fields,
-    h('div', { class: 'ask-actions' }, h('button', { class: 'ask-skip', onclick: () => send({ type: 'answer', tab: S.active, itemId: it.id, action: 'decline' }) }, 'Skip'), submit))
+  // with one question the message usually repeats it: show the message only when it says something else
+  const msg = n === 1 && props[0][1].title && it.message.trim() === String(props[0][1].title).trim() ? null : h('div', { class: 'ask-msg', html: md(it.message) })
+  return h('div', { class: 'q' + (done ? ' done' : '') }, head,
+    h('div', { class: 'q-card' }, msg, blocks,
+      done ? (it.answer.action !== 'accept' ? h('div', { class: 'muted' }, 'Skipped') : null)
+        : h('div', { class: 'ask-actions' }, h('button', { class: 'ask-skip', onclick: () => send({ type: 'answer', tab: S.active, itemId: it.id, action: 'decline' }) }, 'Skip'), submit)))
 }
 
 /** Image thumbnail; click opens it full size. */
