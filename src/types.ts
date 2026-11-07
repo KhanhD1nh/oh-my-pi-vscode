@@ -58,6 +58,8 @@ export type ChatItem =
   | { type: 'thought'; id: string; text: string; at?: number; end?: number }
   | { type: 'tool'; id: string; card: ToolCard }
   | { type: 'error'; id: string; text: string }
+  /** Something the extension did on its own (autopilot), shown as a small line. */
+  | { type: 'notice'; id: string; text: string; at?: number }
   | { type: 'permission'; id: string; title: string; options: { optionId: string; name: string; kind: string }[]; chosen?: string }
   | { type: 'ask'; id: string; message: string; schema: AskSchema; answer?: { action: 'accept' | 'decline' | 'cancel'; content?: Record<string, AskValue> } }
 
@@ -97,6 +99,8 @@ export interface SessionStats {
 /** One open tab (omp session) as the webview shows it. */
 export interface TabState {
   id: string
+  /** Autopilot on for this chat. */
+  autopilot?: boolean
   title?: string
   busy: boolean
   queued: number
@@ -146,6 +150,7 @@ export type WebviewMessage =
   | { type: 'setModel'; tab: string; value: string }
   | { type: 'setThinking'; tab: string; value: string }
   | { type: 'setMode'; tab: string; value: string }
+  | { type: 'autopilot'; tab: string; on: boolean }
   | { type: 'openFile'; path: string; line?: number }
   | { type: 'openDiff'; tab: string; toolId: string }
   | { type: 'listSessions' }

@@ -100,6 +100,13 @@ export class Transcript {
     return item
   }
 
+  /** Append a notice line (extension did something on its own). */
+  notice(text: string): ChatItem {
+    const item: ChatItem = { type: 'notice', id: this.nextId(), text, at: Date.now() }
+    this.items.push(item)
+    return item
+  }
+
   /** Append an error line. */
   error(text: string): ChatItem {
     const item: ChatItem = { type: 'error', id: this.nextId(), text }

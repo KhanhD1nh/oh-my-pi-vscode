@@ -52,13 +52,14 @@ export async function handleMessage(p: ChatProvider, m: WebviewMessage, from: st
     case 'setModel': await p.tab(m.tab)?.session.setOption('model', m.value); return
     case 'setThinking': await p.tab(m.tab)?.session.setOption('thinking', m.value); return
     case 'setMode': await p.tab(m.tab)?.session.setMode(m.value); return
+    case 'autopilot': { const t = p.tab(m.tab); if (t) { t.session.autopilot.enabled = m.on; t.session.autopilot.pinned = true; p.refreshTab(t.session.id) } return }
     case 'openFile': await openFile(cwdOf(p.active), m.path, m.line); return
     case 'openDiff': await openDiff(p.tab(m.tab)?.session.transcript.card(m.toolId), m.toolId, p.diffBefore); return
     case 'listSessions': reply({ type: 'sessions', rows: await p.sessionRows() }); return
     case 'loadSession': await p.openSession(m.sessionId); return
     case 'goal': {
       const cfg = vscode.workspace.getConfiguration('ohMyPi')
-      p.tab(m.tab)?.session.setGoal(m.action, { ...m.objective !== undefined ? { objective: m.objective } : {}, maxTurns: m.maxTurns ?? cfg.get<number>('goal.maxTurns', 20), maxCost: m.maxCost ?? cfg.get<number>('goal.maxCost', 0) })
+      p.tab(m.tab)?.session.setGoal(m.action, { ...m.objective !== undefined ? { objective: m.objective } : {}, maxTurns: m.maxTurns ?? cfg.get<number>('goal.maxTurns', 50), maxCost: m.maxCost ?? cfg.get<number>('goal.maxCost', 0) })
       return
     }
     case 'editFrom': {

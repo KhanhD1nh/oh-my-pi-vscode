@@ -232,6 +232,8 @@ function menuEl() {
       h('div', { class: 'menu-group row' }, h('span', {}, 'Modes'), h('span', { class: 'kbd' }, '⇧ + Tab to switch')),
       APPROVAL.map(x => row(!plan && x.id === S.approval, x.icon, x.name, x.desc, () => { setApproval(x.id); closeMenu() })),
       t.modes.some(m => m.id === 'plan') ? row(plan, MI.plan, 'Plan', 'Explores the code and presents a plan before editing', () => { send({ type: 'setMode', tab: S.active, value: plan ? 'default' : 'plan' }); closeMenu() }) : null,
+      h('div', { class: 'menu-sep' }),
+      row(t.autopilot !== false, MI.bolt, 'Autopilot', 'Keeps going on its own: continues unfinished todo lists and breaks waits that never return', () => { send({ type: 'autopilot', tab: S.active, on: t.autopilot === false }); t.autopilot = t.autopilot === false; closeMenu() }),
       lv.length ? [h('div', { class: 'menu-sep' }), h('div', { class: 'effort' }, svg(ICON.brain), h('span', {}, `Effort (${cap(t.thinking ?? 'auto')})`), h('span', { class: 'grow' }),
         h('span', { class: 'dots' }, lv.map((l, i) => h('button', { class: `dot${i <= cur ? ' on' : ''}${i === cur ? ' cur' : ''}`, title: cap(l), onclick: e => { e.stopPropagation(); send({ type: 'setThinking', tab: S.active, value: l }); t.thinking = l; refreshComposer() } }))))] : null)
   }

@@ -12,7 +12,7 @@ function toggle(key) {
 }
 function itemNode(it) {
   if (it.type === 'user') return h('div', { class: 'user-wrap' }, it.images?.length ? h('div', { class: 'user-imgs' }, it.images.map(i => thumb(`data:${i.mimeType};base64,${i.data}`))) : null, h('div', { class: 'msg user' }, it.text ? h('div', { class: 'msg-text', html: md(it.text) }) : null, userActions(it)), it.at ? h('div', { class: 'msg-time', title: new Date(it.at).toLocaleString() }, clock(it.at)) : null)
-  const state = it.type === 'tool' ? it.card.status : it.type === 'error' ? 'failed' : 'text'
+  const state = it.type === 'tool' ? it.card.status : it.type === 'error' ? 'failed' : it.type === 'notice' ? 'text notice-step' : 'text'
   return h('div', { class: `step ${state}` }, itemBody(it))
 }
 function itemBody(it) {
@@ -26,6 +26,7 @@ function itemBody(it) {
     }
     case 'tool': return toolEl(it.card, it.id)
     case 'error': return h('div', { class: 'msg error' }, it.text)
+    case 'notice': return h('div', { class: 'notice' }, h('span', { class: 'notice-ico', 'aria-hidden': 'true' }, '↻'), it.text, it.at ? h('span', { class: 'notice-at' }, clock(it.at)) : null)
     case 'ask': return askEl(it)
     case 'permission': return permissionEl(it)
   }

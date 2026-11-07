@@ -10,7 +10,8 @@ import { webviewHtml } from './html.ts'
 import { errorText, handleMessage } from './messages.ts'
 import type { OmpConfigCli } from './settings.ts'
 import { SettingsPane } from './settingsPane.ts'
-import { sessionStats } from './stats.ts'
+import { sessionJobs, sessionStats } from './stats.ts'
+import { longWait, nudgePrompt, shouldNudge } from './autopilot.ts'
 import type { AgentModelChoice, ChatItem, HostMessage, SessionStats, TabState, WebviewMessage } from './types.ts'
 
 export const PANEL_TYPE = 'ohMyPi.panel'
@@ -31,6 +32,9 @@ export class ChatProvider implements vscode.WebviewViewProvider {
   private creating: Promise<void> | undefined
   private spinAt = 0
   private readonly spinner = setInterval(() => this.tickTitles(), 100)
+  /** Autopilot watchdog: breaks waits that will never return. Waits already nudged are not nudged twice. */
+  private readonly watchdog = setInterval(() => { void this.checkStalls() }, 30_000)
+  private readonly nudged = new Set<string>()
   private readonly lastTitles = new Map<string, string | undefined>()
   private readonly wasBusy = new Map<string, boolean>()
   private sidebarTimer: ReturnType<typeof setTimeout> | undefined
@@ -122,11 +126,14 @@ export class ChatProvider implements vscode.WebviewViewProvider {
     for (const [tab, items] of all) for (const item of items.values()) this.postTab(tab, { type: 'upsert', tab, item })
   }
 
+  /** Push one tab's state to its panel (after a change the session did not announce itself). */
+  refreshTab(id: string): void { const t = this.tab(id); if (t) this.postTab(id, { type: 'tab', tab: this.tabState(t.session) }) }
+
   private tabState(s: OmpSession): TabState {
     const t = this.tab(s.id)
     const branch = t ? branchOf(t.cwd) : undefined
     return {
-      id: s.id, busy: s.busy, queued: s.queue.filter(q => !q.goal).length, ...s.goal ? { goal: s.goal } : {}, thinkingLevels: s.thinkingLevels, modes: s.modes, commands: s.commands, usage: s.usage,
+      id: s.id, autopilot: s.autopilot.enabled, busy: s.busy, queued: s.queue.filter(q => !q.goal).length, ...s.goal ? { goal: s.goal } : {}, thinkingLevels: s.thinkingLevels, modes: s.modes, commands: s.commands, usage: s.usage,
       ...s.title ? { title: s.title } : {}, ...s.model ? { model: s.model } : {}, ...s.thinking ? { thinking: s.thinking } : {}, ...s.mode ? { mode: s.mode } : {},
       ...t?.unread ? { unread: true } : {},
       ...t ? { folder: t.cwd.replace(/\\/gu, '/').split('/').filter(Boolean).pop() ?? t.cwd, startedAt: t.startedAt } : {},
@@ -174,6 +181,9 @@ export class ChatProvider implements vscode.WebviewViewProvider {
     panel.iconPath = vscode.Uri.joinPath(media, 'pi-tab.svg')
     panel.webview.html = webviewHtml(panel.webview, media, 'panel', { sessionId: session.id, cwd })
     const entry: ChatTab = { session, cwd, unread: false, panel, startedAt: Date.now() }
+    const ap = vscode.workspace.getConfiguration('ohMyPi')
+    session.autopilot.enabled = ap.get<boolean>('autopilot.enabled', true)
+    session.autopilot.maxContinues = ap.get<number>('autopilot.maxContinues', 5)
     this.tabs.push(entry)
     this.active = session.id
     panel.webview.onDidReceiveMessage((m: WebviewMessage) => { void this.onMessage(m, session.id) })
@@ -293,6 +303,26 @@ export class ChatProvider implements vscode.WebviewViewProvider {
     })
   }
 
+  /** A `wait` stuck for minutes with no job left to deliver (or far too long) gets a nudge into the running turn. */
+  private async checkStalls(): Promise<void> {
+    const cfg = vscode.workspace.getConfiguration('ohMyPi')
+    const on = cfg.get<boolean>('autopilot.enabled', true)
+    const stallMs = cfg.get<number>('autopilot.stallMinutes', 3) * 60_000
+    const now = Date.now()
+    for (const t of this.tabs) {
+      const s = t.session
+      if (!s.autopilot.pinned) s.autopilot.enabled = on
+      s.autopilot.maxContinues = cfg.get<number>('autopilot.maxContinues', 5)
+      if (!s.autopilot.enabled || !s.busy) continue
+      const w = longWait(s.transcript.items, now, stallMs)
+      if (w === undefined || this.nudged.has(w.id)) continue
+      const running = (await sessionJobs(t.cwd, s.id).catch(() => [])).filter(j => j.status === 'running' && j.type !== 'task').length
+      if (!shouldNudge(w, running, now, stallMs * 5)) continue
+      this.nudged.add(w.id)
+      s.nudge(nudgePrompt(running, Math.round((now - (w.startedAt ?? now)) / 60_000)))
+    }
+  }
+
   /** Debounced: re-list sessions in the sidebar after a turn ends. */
   private refreshSidebar(): void {
     clearTimeout(this.sidebarTimer)
@@ -331,5 +361,5 @@ export class ChatProvider implements vscode.WebviewViewProvider {
     }
   }
 
-  dispose(): void { this.status.dispose(); clearInterval(this.spinner); for (const h of this.hosts.values()) h.dispose() }
+  dispose(): void { this.status.dispose(); clearInterval(this.spinner); clearInterval(this.watchdog); for (const h of this.hosts.values()) h.dispose() }
 }

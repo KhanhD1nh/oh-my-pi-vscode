@@ -350,7 +350,7 @@ function toggle(key) {
 }
 function itemNode(it) {
   if (it.type === 'user') return h('div', { class: 'user-wrap' }, it.images?.length ? h('div', { class: 'user-imgs' }, it.images.map(i => thumb(`data:${i.mimeType};base64,${i.data}`))) : null, h('div', { class: 'msg user' }, it.text ? h('div', { class: 'msg-text', html: md(it.text) }) : null, userActions(it)), it.at ? h('div', { class: 'msg-time', title: new Date(it.at).toLocaleString() }, clock(it.at)) : null)
-  const state = it.type === 'tool' ? it.card.status : it.type === 'error' ? 'failed' : 'text'
+  const state = it.type === 'tool' ? it.card.status : it.type === 'error' ? 'failed' : it.type === 'notice' ? 'text notice-step' : 'text'
   return h('div', { class: `step ${state}` }, itemBody(it))
 }
 function itemBody(it) {
@@ -364,6 +364,7 @@ function itemBody(it) {
     }
     case 'tool': return toolEl(it.card, it.id)
     case 'error': return h('div', { class: 'msg error' }, it.text)
+    case 'notice': return h('div', { class: 'notice' }, h('span', { class: 'notice-ico', 'aria-hidden': 'true' }, '↻'), it.text, it.at ? h('span', { class: 'notice-at' }, clock(it.at)) : null)
     case 'ask': return askEl(it)
     case 'permission': return permissionEl(it)
   }
@@ -771,6 +772,8 @@ function menuEl() {
       h('div', { class: 'menu-group row' }, h('span', {}, 'Modes'), h('span', { class: 'kbd' }, '⇧ + Tab to switch')),
       APPROVAL.map(x => row(!plan && x.id === S.approval, x.icon, x.name, x.desc, () => { setApproval(x.id); closeMenu() })),
       t.modes.some(m => m.id === 'plan') ? row(plan, MI.plan, 'Plan', 'Explores the code and presents a plan before editing', () => { send({ type: 'setMode', tab: S.active, value: plan ? 'default' : 'plan' }); closeMenu() }) : null,
+      h('div', { class: 'menu-sep' }),
+      row(t.autopilot !== false, MI.bolt, 'Autopilot', 'Keeps going on its own: continues unfinished todo lists and breaks waits that never return', () => { send({ type: 'autopilot', tab: S.active, on: t.autopilot === false }); t.autopilot = t.autopilot === false; closeMenu() }),
       lv.length ? [h('div', { class: 'menu-sep' }), h('div', { class: 'effort' }, svg(ICON.brain), h('span', {}, `Effort (${cap(t.thinking ?? 'auto')})`), h('span', { class: 'grow' }),
         h('span', { class: 'dots' }, lv.map((l, i) => h('button', { class: `dot${i <= cur ? ' on' : ''}${i === cur ? ' cur' : ''}`, title: cap(l), onclick: e => { e.stopPropagation(); send({ type: 'setThinking', tab: S.active, value: l }); t.thinking = l; refreshComposer() } }))))] : null)
   }

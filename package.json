@@ -2,7 +2,7 @@
   "name": "oh-my-pi",
   "displayName": "Oh My Pi",
   "description": "Chat with the omp coding agent inside VS Code: streaming replies, tool cards, diffs, model picker and every omp setting.",
-  "version": "0.30.0",
+  "version": "0.31.0",
   "publisher": "khanhd1nh",
   "license": "MIT",
   "repository": {
@@ -231,6 +231,23 @@
           "default": "omp",
           "description": "omp executable (name on PATH or absolute path). Installed automatically when missing."
         },
+        "ohMyPi.autopilot.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Keep omp going on its own: continue when a turn stops with open todo items, and break waits that have nothing left to wait for."
+        },
+        "ohMyPi.autopilot.maxContinues": {
+          "type": "number",
+          "default": 5,
+          "minimum": 0,
+          "description": "Autopilot: most automatic continuations per message you send (0 = never continue on its own)."
+        },
+        "ohMyPi.autopilot.stallMinutes": {
+          "type": "number",
+          "default": 3,
+          "minimum": 1,
+          "description": "Autopilot: a wait with no background job left is nudged after this many minutes (one with jobs still running after 5× this)."
+        },
         "ohMyPi.compact": {
           "type": "boolean",
           "default": false,
@@ -258,7 +275,7 @@
         },
         "ohMyPi.goal.maxTurns": {
           "type": "number",
-          "default": 20,
+          "default": 50,
           "minimum": 1,
           "description": "Goal mode: stop after this many turns (resume adds more)."
         },

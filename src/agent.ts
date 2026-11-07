@@ -9,6 +9,7 @@ import { client as createAcpClientApp, methods, ndJsonStream, PROTOCOL_VERSION }
 import { ompEnv } from './binary.ts'
 import { Transcript } from './transcript.ts'
 import { type Goal, next as goalNext, startPrompt } from './goal.ts'
+import { continuePrompt, openTodos } from './autopilot.ts'
 import type { AskSchema, AskValue, ChatItem, SessionRow } from './types.ts'
 
 type Rpc = { request: (method: string, params: unknown) => Promise<any>; notify: (method: string, params: unknown) => Promise<void> }
@@ -51,6 +52,8 @@ export class OmpSession {
   queue: { text: string; images: { mimeType: string; data: string }[]; shown?: boolean; goal?: boolean }[] = []
   /** Active goal, driven by the extension between turns. */
   goal: Goal | undefined
+  /** Autopilot: continue on its own when a turn stops with open todo items (at most `maxContinues` per request of yours). */
+  autopilot = { enabled: true, maxContinues: 5, continues: 0, pinned: false }
   private cancelled = false
 
   constructor(private readonly host: OmpHost, readonly id: string, private readonly events: SessionEvents) {}
@@ -102,6 +105,7 @@ export class OmpSession {
    * while omp works are never lost and never race.
    */
   prompt(text: string, images: { mimeType: string; data: string }[] = []): void {
+    this.autopilot.continues = 0
     if (this.busy && this.host.steering) { void this.steer(text, images); return }
     this.queue.push({ text, images })
     this.events.state(this)
@@ -147,7 +151,27 @@ export class OmpSession {
       }
       if (!this.named && this.queue.length === 0) void this.nameSession()
       if (this.goal?.status === 'active' && this.queue.length === 0) this.continueGoal()
+      else if (this.queue.length === 0) this.continueTodos()
     }
+  }
+
+  /** Autopilot: the turn ended but its todo list is not finished — send it back to work (not after a stop). */
+  private continueTodos(): void {
+    const a = this.autopilot
+    if (!a.enabled || this.cancelled || a.continues >= a.maxContinues) return
+    const open = openTodos(this.transcript.items)
+    if (!open.length) return
+    a.continues++
+    this.events.item(this, this.transcript.notice(`Autopilot: ${open.length} todo item${open.length > 1 ? 's' : ''} still open — continuing (${a.continues}/${a.maxContinues})`))
+    this.queue.push({ text: continuePrompt(open), images: [], goal: true })
+    void this.drain()
+  }
+
+  /** Autopilot: tell the running turn to stop a wait that will never return. */
+  nudge(text: string): void {
+    if (!this.busy) return
+    this.events.item(this, this.transcript.notice('Autopilot: the wait had nothing left to wait for — told omp to read the results and go on'))
+    if (this.host.steering) void this.host.rpc().request('_session/steering', { sessionId: this.id, prompt: [{ type: 'text', text }] }).catch(() => {})
   }
 
   /** After a turn: decide from the last reply whether the goal goes on, then queue the next prompt. */
