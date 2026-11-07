@@ -103,6 +103,7 @@ function agentEl(c, key, info) {
       h('span', { class: 'agent-ico' }, running ? runDot() : c.status === 'failed' ? '✕' : '✓'),
       h('span', { class: 'agent-name' }, t.name ?? 'task'), t.agent ? h('span', { class: 'agent-kind' }, t.agent) : null,
       h('span', { class: 'agent-task' }, String(t.task ?? '').split('\n')[0]),
+      h('button', { class: 'agent-open', title: 'Open this agent\'s conversation', onclick: e => { e.stopPropagation(); openAgent(c.id, t.name, key) } }, 'View'),
       got?.steps.length ? h('span', { class: 'agent-count' }, `${got.steps.filter(s => s.tool).length} steps${got.cost ? ` · $${got.cost.toFixed(2)}` : ''}`) : null)
     if (!isOpen) return row
     return h('div', {}, row, h('div', { class: 'agent-steps', 'data-k': k }, agentStepNodes(got)))

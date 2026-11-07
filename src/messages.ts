@@ -1,7 +1,7 @@
 /** Webview → host messages: one handler per message type, all run against the chat provider. */
 import * as vscode from 'vscode'
 import type { ChatProvider } from './chats.ts'
-import { agentSteps } from './stats.ts'
+import { agentConversation, agentSteps, sessionJobs } from './stats.ts'
 import type { HostMessage, WebviewMessage } from './types.ts'
 import { exportChat, findFiles, mentionText, openDiff, openFile, revertEditsAfter } from './workspace.ts'
 
@@ -98,6 +98,13 @@ export async function handleMessage(p: ChatProvider, m: WebviewMessage, from: st
       term.show()
       // Typed, not executed: you see exactly what will run and press Enter yourself.
       term.sendText(command, false)
+      return
+    }
+    case 'jobs': { const t = p.tab(m.tab); if (t) reply({ type: 'jobs', tab: m.tab, jobs: await sessionJobs(t.cwd, t.session.id) }); return }
+    case 'agentConversation': {
+      const t = p.tab(m.tab)
+      const got = t ? await agentConversation(t.cwd, t.session.id, m.name) : undefined
+      reply(got ? { type: 'agentConversation', toolId: m.toolId, name: m.name, ...got } : { type: 'agentConversation', toolId: m.toolId, name: m.name, entries: [], cost: 0, missing: true })
       return
     }
     case 'agentSteps': {

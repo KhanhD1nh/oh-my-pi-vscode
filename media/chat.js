@@ -194,6 +194,7 @@ function agentEl(c, key, info) {
       h('span', { class: 'agent-ico' }, running ? runDot() : c.status === 'failed' ? '✕' : '✓'),
       h('span', { class: 'agent-name' }, t.name ?? 'task'), t.agent ? h('span', { class: 'agent-kind' }, t.agent) : null,
       h('span', { class: 'agent-task' }, String(t.task ?? '').split('\n')[0]),
+      h('button', { class: 'agent-open', title: 'Open this agent\'s conversation', onclick: e => { e.stopPropagation(); openAgent(c.id, t.name, key) } }, 'View'),
       got?.steps.length ? h('span', { class: 'agent-count' }, `${got.steps.filter(s => s.tool).length} steps${got.cost ? ` · $${got.cost.toFixed(2)}` : ''}`) : null)
     if (!isOpen) return row
     return h('div', {}, row, h('div', { class: 'agent-steps', 'data-k': k }, agentStepNodes(got)))
@@ -587,11 +588,12 @@ function menuEl() {
         h('span', { class: 'dots' }, lv.map((l, i) => h('button', { class: `dot${i <= cur ? ' on' : ''}${i === cur ? ' cur' : ''}`, title: cap(l), onclick: e => { e.stopPropagation(); send({ type: 'setThinking', tab: S.active, value: l }); t.thinking = l; refreshComposer() } }))))] : null)
   }
   if (S.menu === 'jobs') {
+    if (S.menuEnter) refreshJobs()
     const { agents, jobs } = activity()
     const jump = id => { closeMenu(); const n = nodes.get(id); n?.scrollIntoView({ block: 'center', behavior: 'smooth' }); n?.classList.add('flash'); setTimeout(() => n?.classList.remove('flash'), 900) }
     return h('div', { class: 'menu', style: 'left:6px;min-width:260px' },
-      agents.length ? [h('div', { class: 'menu-group' }, 'Subagents'), agents.map(a => h('button', { class: 'menu-item', onclick: () => jump(a.id) }, runDot(), h('span', {}, a.label), h('span', { class: 'desc' }, since(T0.get(a.cid) ?? Date.now()))))] : null,
-      jobs.length ? [h('div', { class: 'menu-group' }, 'Background'), jobs.map(j => h('button', { class: 'menu-item', onclick: () => jump(j.id) }, h('span', { class: 'live busy' }), h('span', {}, j.label), h('span', { class: 'desc' }, j.command)))] : null,
+      agents.length ? [h('div', { class: 'menu-group' }, `Subagents · ${agents.filter(a => a.running).length} running`), agents.map(a => h('button', { class: 'menu-item agent-item', title: a.task, onclick: () => { closeMenu(); openAgent(a.cid, a.label, a.id) } }, a.running ? runDot() : h('span', { class: `agent-state ${a.failed ? 'failed' : 'done'}` }, a.failed ? '✕' : '✓'), h('span', { class: 'agent-item-name' }, a.label), a.agent ? h('span', { class: 'agent-kind' }, a.agent) : null, h('span', { class: 'desc' }, a.startedAt ? took((a.endedAt ?? Date.now()) - a.startedAt) : ''))), h('div', { class: 'menu-sep' })] : null,
+      bgJobs().length ? [h('div', { class: 'menu-group' }, `Background · ${bgJobs().filter(j => j.status === 'running').length} running`), bgJobs().slice(-12).reverse().map(j => h('button', { class: 'menu-item agent-item', title: j.label, onclick: () => { closeMenu(); openJob(j.jobId) } }, jobState(j.status), h('span', { class: 'agent-item-name job-label' }, j.label), h('span', { class: 'desc' }, j.durationMs != null ? took(j.durationMs) : j.status === 'running' && j.at ? took(Date.now() - j.at) : ''))), bgJobs().length > 12 ? h('button', { class: 'menu-item muted', onclick: () => { closeMenu(); openJob(null) } }, `All ${bgJobs().length} jobs…`) : null] : jobs.length ? [h('div', { class: 'menu-group' }, 'Background'), jobs.map(j => h('button', { class: 'menu-item', onclick: () => jump(j.id) }, runDot(), h('span', {}, j.label), h('span', { class: 'desc' }, j.command)))] : null,
       h('div', { class: 'menu-group' }, 'Ask omp'),
       h('button', { class: 'menu-item', onclick: () => { closeMenu(); send({ type: 'prompt', tab: S.active, text: 'read jobs:// and give me the status of every running task and background service' }) } }, 'Check status of all jobs'))
   }
@@ -863,6 +865,8 @@ function render() {
   if (S.fade) { app.children[1]?.classList.add('fade'); S.fade = false }
   const ta = document.getElementById('input')
   if (ta && S.active) { ta.value = S.drafts[S.active] ?? ''; autosize(ta) }
+  if (agentView.open && S.view === 'chat') renderAgentPanel()
+  if (jobView.open && S.view === 'chat') renderJobPanel()
 }
 
 document.addEventListener('click', (e) => {
@@ -902,6 +906,7 @@ window.addEventListener('message', ({ data: m }) => {
       if (i < 0) return
       const was = S.tabs[i]
       S.tabs[i] = m.tab
+      if (!m.tab.busy && was.busy && m.tab.id === S.active) refreshJobs()
       if (m.tab.busy && !was.busy) { const st = (STAT[m.tab.id] ??= { chars: 0, total: 0, t0: 0, last: 0 }); st.chars = 0; st.t0 = 0 }
       if (m.tab.id === S.active) { refreshStatus(); refreshGoal() }
       if (S.view !== 'chat') return
@@ -932,6 +937,15 @@ window.addEventListener('message', ({ data: m }) => {
       S.settings = m
       if (S.view !== 'settings') return
       if (firstLoad || m.status !== 'ready') render(); else renderSettingsList()
+      return
+    }
+    case 'jobs': { if (m.tab !== S.active) return; const same = JSON.stringify(JOBS[m.tab]) === JSON.stringify(m.jobs); JOBS[m.tab] = m.jobs; if (!same) { refreshComposer(); renderJobPanel() } return }
+    case 'agentConversation': {
+      const o = agentView.open
+      if (!o || o.toolId !== m.toolId || o.name !== m.name) return
+      const same = agentView.data && JSON.stringify(agentView.data.entries) === JSON.stringify(m.entries) && agentView.data.cost === m.cost
+      agentView.data = m
+      if (!same || !document.getElementById('agent-panel')) renderAgentPanel()
       return
     }
     case 'agentSteps': {
@@ -1102,12 +1116,10 @@ function statusLine() {
   const pct = u.size ? (u.used ?? 0) / u.size * 100 : null
   const secs = s.t0 && s.last > s.t0 ? (s.last - s.t0) / 1000 : 0
   const rate = t.busy && secs > 1 ? (s.chars / 4 / secs).toFixed(1) : null
-  const agents = activity().agents.length
   return h('div', { class: 'statusline', id: 'statusline' },
     seg('time', '⏱', t.startedAt ? fmtDur(Date.now() - t.startedAt) : '', 'Tab open for'),
     seg('path', '▣', t.folder ?? '', S.cwd),
     seg('git', '⎇', t.branch ?? '', 'Git branch'),
-    agents ? seg('agents', '◆', String(agents), 'Subagents running') : null,
     h('span', { class: 'grow' }),
     seg('ctx', '', pct === null ? '' : `${pct.toFixed(1)}% · ${fmtTok(u.used ?? 0)}/${fmtTok(u.size)}`, 'Context used (omp)'),
     t.stats ? seg('tin', '↓', fmtTok(t.stats.input), 'Input tokens (omp session)') : null,
@@ -1133,17 +1145,19 @@ function activity() {
     if (it.type !== 'tool') continue
     const c = it.card, running = c.status === 'pending' || c.status === 'in_progress'
     const ti = taskInfo(c)
-    if (ti && running) for (const t of ti.tasks) agents.push({ id: it.id, cid: c.id, label: t.name ?? 'task' })
+    if (ti) for (const t of ti.tasks) agents.push({ id: it.id, cid: c.id, label: t.name ?? 'task', agent: t.agent, task: String(t.task ?? '').split('\n').find(l => l.trim() && !/^#/u.test(l.trim())) ?? '', running, failed: c.status === 'failed', startedAt: c.startedAt, endedAt: c.endedAt })
     const bg = bgInfo(c)
     if (bg && running) jobs.push({ id: it.id, label: bg.name, command: bg.command.slice(0, 40) })
   }
   return { agents, jobs }
 }
 function bgChip() {
-  const { agents, jobs } = activity()
+  const { agents } = activity()
+  const jobs = bgJobs().filter(j => j.type !== 'task')
   if (!agents.length && !jobs.length) return null
-  const label = [agents.length ? `${agents.length} agent${agents.length > 1 ? 's' : ''}` : '', jobs.length ? `${jobs.length} bg` : ''].filter(Boolean).join(' · ')
-  return h('button', { class: `chip-btn jobs${S.menu === 'jobs' ? ' open' : ''}`, title: 'Subagents and background jobs', onclick: () => openMenu('jobs') }, agents.length ? runDot() : h('span', { class: 'live busy' }), h('span', { class: 'label' }, label))
+  const live = agents.filter(a => a.running).length
+  const label = [agents.length ? (live ? `${live}/${agents.length} agents` : `${agents.length} agent${agents.length > 1 ? 's' : ''}`) : '', jobs.length ? `${jobs.filter(j => j.status === 'running').length ? jobs.filter(j => j.status === 'running').length + '/' : ''}${jobs.length} bg` : ''].filter(Boolean).join(' · ')
+  return h('button', { class: `chip-btn jobs${S.menu === 'jobs' ? ' open' : ''}`, title: 'Subagents and background jobs', onclick: () => openMenu('jobs') }, agents.some(a => a.running) || jobs.some(j => j.status === 'running') ? runDot() : (agents.length || jobs.length) ? h('span', { class: 'agent-done-dot', 'aria-hidden': 'true' }) : h('span', { class: 'live busy' }), h('span', { class: 'label' }, label))
 }
 // live timers on running tool lines and agent cards
 EVERY_SECOND.push(() => { for (const el of document.querySelectorAll('.tool-time.ticking[data-since]')) { const v = took(Date.now() - Number(el.dataset.since)); if (el.textContent !== v) el.textContent = v } })
@@ -1172,6 +1186,118 @@ function toggleAgent(k, toolId, name, cardKey) {
 /** Copy button that copies `text` exactly (not the clipped view). */
 function copyBtn(text) { const b = h('button', { class: 'copy', title: 'Copy' }, 'Copy'); b.dataset.text = text ?? ''; return b }
 
+
+// ───────────── agent conversation panel ─────────────
+/** One subagent's own conversation, over the chat: assignment, thinking, replies, tools with IN/OUT. */
+const agentView = { open: null, data: null, poll: null, follow: true }
+function openAgent(toolId, name, cardKey) {
+  agentView.open = { toolId, name, cardKey }
+  agentView.data = null
+  agentView.follow = true
+  renderAgentPanel()
+  const ask = () => send({ type: 'agentConversation', tab: S.active, toolId, name })
+  ask()
+  clearInterval(agentView.poll)
+  agentView.poll = setInterval(() => {
+    if (document.hidden || !agentView.open) return
+    const it = items().find(x => x.id === cardKey)
+    ask()
+    if (!it || (it.card.status !== 'pending' && it.card.status !== 'in_progress')) { clearInterval(agentView.poll); agentView.poll = null }
+  }, 2000)
+}
+function closeAgent() {
+  clearInterval(agentView.poll); agentView.poll = null
+  agentView.open = null; agentView.data = null
+  document.getElementById('agent-panel')?.remove()
+  document.getElementById('input')?.focus()
+}
+function agentEntryEl(e) {
+  if (e.kind === 'prompt') return h('div', { class: 'ae ae-prompt' }, h('div', { class: 'ae-label' }, 'Assignment'), h('div', { class: 'msg', html: md(e.text) }))
+  if (e.kind === 'thinking') return h('details', { class: 'ae ae-think' }, h('summary', {}, svg(ICON.brain), 'Thinking'), h('div', { class: 'thought-body', html: md(e.text) }))
+  if (e.kind === 'text') return h('div', { class: 'ae ae-text msg', html: md(e.text) })
+  const open = e.status === 'running'
+  return h('details', { class: `ae ae-tool ${e.status}`, ...open ? { open: true } : {} },
+    h('summary', {}, h('span', { class: `ae-dot ${e.status}` }), h('span', { class: 'tool-verb' }, cap(e.name)), h('span', { class: 'tool-target' }, e.label)),
+    h('div', { class: 'io' },
+      e.input ? h('div', { class: 'io-row' }, h('span', { class: 'io-k' }, 'IN'), h('div', { class: 'io-v codeblock' }, copyBtn(e.input), h('pre', {}, e.input))) : null,
+      e.output ? h('div', { class: 'io-row' }, h('span', { class: 'io-k' }, 'OUT'), h('div', { class: 'io-v codeblock' }, copyBtn(e.output), h('pre', {}, e.output))) : null))
+}
+function renderAgentPanel() {
+  const o = agentView.open; if (!o) return
+  const d = agentView.data
+  const a = activity().agents.find(x => x.cid === o.toolId && x.label === o.name)
+  const old = document.getElementById('agent-panel')
+  const oldBody = old?.querySelector('.ap-body')
+  const keepTop = oldBody ? oldBody.scrollTop : 0
+  const atBottom = oldBody ? oldBody.scrollHeight - oldBody.scrollTop - oldBody.clientHeight < 40 : true
+  // keep open/closed state of each tool entry across refreshes
+  const openState = old ? [...old.querySelectorAll('.ap-body > details')].map(x => x.open) : []
+  const status = a?.running ? 'running' : a?.failed ? 'failed' : 'done'
+  const head = h('div', { class: 'ap-head' },
+    h('button', { class: 'icon-btn', title: 'Back to the chat (Esc)', onclick: closeAgent }, svg(ICON.back)),
+    h('div', { class: 'ap-title' },
+      h('div', { class: 'ap-name' }, a?.running ? runDot() : h('span', { class: `agent-state ${status}` }, status === 'failed' ? '✕' : '✓'), h('b', {}, o.name), a?.agent ? h('span', { class: 'agent-kind' }, a.agent) : null),
+      h('div', { class: 'ap-meta' }, [a?.startedAt ? took((a.endedAt ?? Date.now()) - a.startedAt) : '', d?.model ? d.model.split('/').pop() : '', d?.cost ? '$' + d.cost.toFixed(2) : '', d ? `${d.entries.filter(e => e.kind === 'tool').length} tool calls` : ''].filter(Boolean).join(' · '))),
+    h('button', { class: 'icon-btn', title: 'Show in chat', onclick: () => { const n = nodes.get(o.cardKey); closeAgent(); n?.scrollIntoView({ block: 'center', behavior: 'smooth' }) } }, svg(ICON.chevron)))
+  const body = h('div', { class: 'ap-body', tabindex: '0', role: 'region', 'aria-label': `${o.name} conversation` },
+    !d ? h('div', { class: 'muted ap-empty' }, 'Reading the agent log…')
+      : d.missing ? h('div', { class: 'muted ap-empty' }, 'No log for this agent yet. omp writes it when the agent starts.')
+      : !d.entries.length ? h('div', { class: 'muted ap-empty' }, 'Nothing yet.')
+      : d.entries.map(agentEntryEl))
+  const panel = h('div', { class: 'agent-panel', id: 'agent-panel', onkeydown: e => { if (e.key === 'Escape') { e.preventDefault(); closeAgent() } } }, head, body)
+  if (old) old.replaceWith(panel); else { app.append(panel); panel.classList.add('enter'); queueMicrotask(() => body.focus()) }
+  body.querySelectorAll(':scope > details').forEach((x, i) => { if (openState[i] !== undefined) x.open = openState[i] })
+  body.scrollTop = atBottom && agentView.follow ? body.scrollHeight : keepTop
+  body.addEventListener('scroll', () => { agentView.follow = body.scrollHeight - body.scrollTop - body.clientHeight < 40 })
+}
+
+// ───────────── background jobs ─────────────
+/** Jobs of the active chat from omp's session file (refreshed when the chip menu opens and after each turn). */
+const JOBS = {}
+const bgJobs = () => (JOBS[S.active] ?? []).filter(j => j.type !== 'task')
+function refreshJobs() { if (S.active) send({ type: 'jobs', tab: S.active }) }
+function jobState(status) {
+  if (status === 'running') return runDot()
+  return h('span', { class: `agent-state ${status === 'failed' ? 'failed' : 'done'}` }, status === 'failed' ? '✕' : '✓')
+}
+/** Full-panel view of background jobs: a list on top, the selected job's command and output below. */
+const jobView = { open: false, id: null, filter: 'all' }
+function openJob(id) { jobView.open = true; jobView.id = id; refreshJobs(); renderJobPanel() }
+function closeJobs() { jobView.open = false; document.getElementById('job-panel')?.remove(); document.getElementById('input')?.focus() }
+function renderJobPanel() {
+  if (!jobView.open) return
+  const all = bgJobs()
+  const list = jobView.filter === 'all' ? all : all.filter(j => j.status === jobView.filter)
+  const sel = all.find(j => j.jobId === jobView.id) ?? list.at(-1)
+  const count = s => all.filter(j => j.status === s).length
+  const tab = (key, label) => h('button', { class: `cat${jobView.filter === key ? ' on' : ''}`, onclick: () => { jobView.filter = key; renderJobPanel() } }, label)
+  const old = document.getElementById('job-panel')
+  const keep = old?.querySelector('.jp-out pre')?.scrollTop ?? 0
+  const panel = h('div', { class: 'agent-panel', id: 'job-panel', onkeydown: e => { if (e.key === 'Escape') { e.preventDefault(); closeJobs() } } },
+    h('div', { class: 'ap-head' },
+      h('button', { class: 'icon-btn', title: 'Back to the chat (Esc)', onclick: closeJobs }, svg(ICON.back)),
+      h('div', { class: 'ap-title' }, h('div', { class: 'ap-name' }, h('b', {}, 'Background jobs')), h('div', { class: 'ap-meta' }, `${all.length} in this chat · ${count('running')} running · ${count('failed')} failed`)),
+      h('button', { class: 'icon-btn', title: 'Refresh', onclick: refreshJobs }, svg(ICON.history))),
+    h('div', { class: 'jp-tabs cats' }, tab('all', `All ${all.length}`), tab('running', `Running ${count('running')}`), tab('failed', `Failed ${count('failed')}`), tab('completed', `Done ${count('completed')}`)),
+    h('div', { class: 'jp-list', role: 'listbox', 'aria-label': 'Background jobs' },
+      !list.length ? h('div', { class: 'muted ap-empty' }, all.length ? 'No jobs in this filter.' : 'No background jobs in this chat yet.') :
+        [...list].reverse().map(j => h('button', { class: `jp-row${sel?.jobId === j.jobId ? ' on' : ''}`, role: 'option', 'aria-selected': sel?.jobId === j.jobId ? 'true' : 'false', onclick: () => { jobView.id = j.jobId; renderJobPanel() } },
+          jobState(j.status), h('span', { class: 'jp-label' }, j.label), h('span', { class: 'jp-id' }, j.jobId),
+          h('span', { class: 'desc' }, j.durationMs != null ? took(j.durationMs) : j.status === 'running' && j.at ? took(Date.now() - j.at) : '')))),
+    sel ? h('div', { class: 'jp-out' },
+      h('div', { class: 'jp-out-head' }, jobState(sel.status), h('b', {}, sel.label), h('span', { class: 'muted' }, ` · ${sel.status}${sel.at ? ' · started ' + clock(sel.at) : ''}`)),
+      sel.output ? h('div', { class: 'codeblock' }, copyBtn(sel.output), h('pre', {}, sel.output))
+        : h('div', { class: 'muted ap-empty' }, sel.status === 'running' ? 'Still running — its output arrives when it finishes.' : 'No output.')) : null)
+  if (old) old.replaceWith(panel); else { app.append(panel); panel.classList.add('enter'); queueMicrotask(() => panel.querySelector('.jp-row.on, .jp-row')?.focus()) }
+  const pre = panel.querySelector('.jp-out pre'); if (pre) pre.scrollTop = keep
+}
+
+// Esc closes an open agent/jobs panel wherever focus is (the panel covers the chat, so it owns Esc).
+document.addEventListener('keydown', e => {
+  if (e.key !== 'Escape') return
+  if (document.getElementById('agent-panel')) { e.preventDefault(); e.stopPropagation(); closeAgent() }
+  else if (document.getElementById('job-panel')) { e.preventDefault(); e.stopPropagation(); closeJobs() }
+}, true)
 
 // Todo bar and lists, in-chat permission cards.
 // ───────────── todo (omp `todo` tool) ─────────────

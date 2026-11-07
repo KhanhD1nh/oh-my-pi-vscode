@@ -160,3 +160,132 @@ export function foldSteps(lines: Iterable<string>): { steps: AgentStep[]; model?
   }
   return { steps, ...model ? { model } : {}, cost }
 }
+
+/** One entry of a subagent's own conversation, already folded for display. */
+export type AgentEntry =
+  | { kind: 'prompt'; text: string; at?: number }
+  | { kind: 'thinking'; text: string; at?: number }
+  | { kind: 'text'; text: string; at?: number }
+  | { kind: 'tool'; name: string; label: string; input?: string; output?: string; status: 'running' | 'done' | 'failed'; at?: number }
+
+/**
+ * The whole conversation of subagent `name`: its assignment, its thinking and replies, every tool call with
+ * input and output. Text is capped per entry so a huge log stays cheap to send.
+ */
+export async function agentConversation(cwd: string, sessionId: string, name: string): Promise<{ entries: AgentEntry[]; model?: string; cost: number } | undefined> {
+  const dir = join(homedir(), '.omp', 'agent', 'sessions', folderKey(cwd))
+  let names: string[]
+  try { names = await fs.readdir(dir) } catch { return undefined }
+  const sessionDir = names.find(n => n.endsWith(`_${sessionId}`) && !n.endsWith('.jsonl'))
+  if (sessionDir === undefined || !/^[\w.-]+$/u.test(name)) return undefined
+  let text: string
+  try { text = await fs.readFile(join(dir, sessionDir, `${name}.jsonl`), 'utf8') } catch { return undefined }
+  return foldConversation(text.split('\n'))
+}
+
+/** Pure fold of a subagent session file into conversation entries. */
+export function foldConversation(lines: Iterable<string>, cap = 6000): { entries: AgentEntry[]; model?: string; cost: number } {
+  const entries: AgentEntry[] = []
+  const byCall = new Map<string, Extract<AgentEntry, { kind: 'tool' }>>()
+  const clip = (s: string) => s.length > cap ? `${s.slice(0, cap)}\n… (${s.length - cap} more characters)` : s
+  let model: string | undefined
+  let cost = 0
+  for (const line of lines) {
+    if (line[0] !== '{') continue
+    let e: { type?: string; timestamp?: string; usage?: { cost?: { total?: number } }; message?: { role?: string; attribution?: string; model?: string; content?: unknown; toolCallId?: string; isError?: boolean; usage?: { cost?: { total?: number } } } }
+    try { e = JSON.parse(line) } catch { continue }
+    if (e.type === 'model_usage') { cost += e.usage?.cost?.total ?? 0; continue }
+    if (e.type !== 'message' || !e.message) continue
+    const m = e.message
+    const at = e.timestamp ? Date.parse(e.timestamp) : undefined
+    const parts = (Array.isArray(m.content) ? m.content : typeof m.content === 'string' ? [{ type: 'text', text: m.content }] : []) as { type?: string; text?: string; thinking?: string; id?: string; name?: string; arguments?: Record<string, unknown> }[]
+    if (m.role === 'user') {
+      const t = parts.filter(c => c.type === 'text').map(c => c.text ?? '').join('\n').trim()
+      if (t) entries.push({ kind: 'prompt', text: clip(t), ...at ? { at } : {} })
+    } else if (m.role === 'assistant') {
+      cost += m.usage?.cost?.total ?? 0
+      if (m.model) model = m.model
+      for (const c of parts) {
+        if (c.type === 'thinking' && c.thinking?.trim()) entries.push({ kind: 'thinking', text: clip(c.thinking.trim()), ...at ? { at } : {} })
+        else if (c.type === 'text' && c.text?.trim()) entries.push({ kind: 'text', text: clip(c.text.trim()), ...at ? { at } : {} })
+        else if (c.type === 'toolCall') {
+          const a = c.arguments ?? {}
+          const target = [a.path, a.command, a.query, a.pattern, a.url, a.code].find(v => typeof v === 'string') as string | undefined
+          const tool = { kind: 'tool' as const, name: String(c.name ?? 'tool'), label: String(a.i ?? target ?? c.name ?? 'tool').slice(0, 160), input: clip(typeof a.command === 'string' ? a.command : typeof a.code === 'string' ? a.code : JSON.stringify(a)), status: 'running' as const, ...at ? { at } : {} }
+          entries.push(tool)
+          if (c.id) byCall.set(c.id, tool)
+        }
+      }
+    } else if (m.role === 'toolResult' && m.toolCallId) {
+      const t = byCall.get(m.toolCallId)
+      if (t === undefined) continue
+      ;(t as { status: string }).status = m.isError ? 'failed' : 'done'
+      const out = parts.filter(c => c.type === 'text').map(c => c.text ?? '').join('\n').trim()
+      if (out) t.output = clip(out)
+    }
+  }
+  return { entries, ...model ? { model } : {}, cost }
+}
+
+/** A background job omp started in this session (bash `async`, or a subagent) and what came of it. */
+export interface JobInfo { jobId: string; type: string; label: string; status: 'running' | 'completed' | 'failed' | string; durationMs?: number; output?: string; at?: number }
+
+/** Background jobs of session `sessionId`, from omp's own delivery notices in the session file. */
+export async function sessionJobs(cwd: string, sessionId: string): Promise<JobInfo[]> {
+  const dir = join(homedir(), '.omp', 'agent', 'sessions', folderKey(cwd))
+  let names: string[]
+  try { names = await fs.readdir(dir) } catch { return [] }
+  const file = names.find(n => n.endsWith(`_${sessionId}.jsonl`))
+  if (file === undefined) return []
+  let text: string
+  try { text = await fs.readFile(join(dir, file), 'utf8') } catch { return [] }
+  return foldJobs(text.split('\n'))
+}
+
+/** Pure fold: "Backgrounded as job bg_N" tool results start a job, "background job delivery" notices end it. */
+export function foldJobs(lines: Iterable<string>, cap = 20_000): JobInfo[] {
+  const jobs = new Map<string, JobInfo>()
+  const commands = new Map<string, string>()
+  for (const line of lines) {
+    if (line[0] !== '{' || !/Backgrounded as job|"async-result"|### bg_\S+ \[|"toolCall"/u.test(line)) continue
+    let e: { type?: string; customType?: string; timestamp?: string; content?: unknown; details?: { jobs?: { jobId?: string; type?: string; status?: string; label?: string; durationMs?: number }[]; async?: { jobId?: string; type?: string } }; message?: { role?: string; toolCallId?: string; content?: { type?: string; text?: string; id?: string; name?: string; arguments?: { command?: string; i?: string } }[]; details?: { async?: { jobId?: string; type?: string } } } }
+    try { e = JSON.parse(line) } catch { continue }
+    const at = e.timestamp ? Date.parse(e.timestamp) : undefined
+    // remember each bash call's command, to label the job it starts
+    if (e.message?.role === 'assistant') {
+      for (const c of e.message.content ?? []) if (c.type === 'toolCall' && c.id && c.name === 'bash' && c.arguments?.command) commands.set(c.id, c.arguments.i ?? c.arguments.command)
+      continue
+    }
+    const started = e.message?.role === 'toolResult' ? e.message.details?.async : undefined
+    if (started?.jobId) {
+      const label = (e.message?.toolCallId && commands.get(e.message.toolCallId)) || (e.message?.content ?? []).map(c => c.text ?? '').join(' ').replace(/Backgrounded as job[\s\S]*/u, '').trim() || started.jobId
+      jobs.set(started.jobId, { jobId: started.jobId, type: started.type ?? 'bash', label: label.slice(0, 160), status: 'running', ...at ? { at } : {} })
+      continue
+    }
+    // a job report the model asked for ("### bg_21 [bash] — failed … ``` output ```"): the only result for jobs
+    // omp did not deliver on its own
+    if (e.message?.role === 'toolResult') {
+      const body = (e.message.content ?? []).map(c => c.text ?? '').join('\n')
+      // each "### id [type] — status" section runs to the next one or the next "## " heading
+      for (const m of body.matchAll(/### (\S+) \[(\w+)\] — (\w+)\n(?:Label: ([^\n]*)\n)?([\s\S]*?)(?=\n### \S+ \[|\n## |$)/gu)) {
+        const prev = jobs.get(m[1]!)
+        const section = m[5]!
+        // completed jobs carry their output in a ``` block; failed ones after "Error:"
+        const out = (/```\n?([\s\S]*?)```/u.exec(section)?.[1] ?? /Error:\s*([\s\S]*)$/u.exec(section)?.[1] ?? '').trim()
+        jobs.set(m[1]!, { ...prev, jobId: m[1]!, type: m[2]!, label: prev?.label && prev.label !== m[1] ? prev.label : (m[4] ?? m[1]!), status: m[3]!, ...out ? { output: out.length > cap ? `${out.slice(0, cap)}\n… (${out.length - cap} more characters)` : out } : {}, ...prev?.at ?? at ? { at: prev?.at ?? at } : {} })
+      }
+      continue
+    }
+    if (e.type === 'custom_message' && e.customType === 'async-result') {
+      const body = typeof e.content === 'string' ? e.content : ''
+      for (const j of e.details?.jobs ?? []) {
+        if (!j.jobId) continue
+        // the notice body is "<system-notice>\nBackground job X has completed. …\n<output>\n</system-notice>"
+        const out = body.replace(/^<system-notice>\s*/u, '').replace(/\s*<\/system-notice>\s*$/u, '').replace(/^Background job \S+ has \w+\.[^\n]*\n?/u, '').trim()
+        const prev = jobs.get(j.jobId)
+        jobs.set(j.jobId, { ...prev, jobId: j.jobId, type: j.type ?? prev?.type ?? 'bash', label: j.label ?? prev?.label ?? j.jobId, status: j.status ?? 'completed', ...j.durationMs !== undefined ? { durationMs: j.durationMs } : {}, ...out ? { output: out.length > cap ? `${out.slice(0, cap)}\n… (${out.length - cap} more characters)` : out } : {}, ...prev?.at ?? at ? { at: prev?.at ?? at } : {} })
+      }
+    }
+  }
+  return [...jobs.values()]
+}

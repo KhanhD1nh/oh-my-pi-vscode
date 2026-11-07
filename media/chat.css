@@ -437,7 +437,6 @@ code { font-size: 0.88em; }
 .seg { display: inline-flex; align-items: center; gap: 4px; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .seg-i { opacity: .8; }
 .seg.path, .seg.git { flex-shrink: 1; }
-.seg.agents { color: var(--omp-purple); }
 .seg.rate { color: var(--omp-pink); }
 .seg.cost { color: var(--omp-yellow); }
 .seg.git { color: var(--omp-cyan); }
@@ -726,3 +725,56 @@ body.vscode-light { --rail: color-mix(in srgb, var(--vscode-foreground) 14%, tra
 .need-btn:hover { background: var(--vscode-button-hoverBackground); }
 .need-btn svg { width: 14px; height: 14px; }
 .need-input, .need-btn { font-family: var(--vscode-font-family, "Segoe UI", system-ui, sans-serif); }
+
+/* ── agents: chip, menu, conversation panel ── */
+.agent-done-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--vscode-testing-iconPassed, #3fb950); flex: none; }
+.agent-state { width: 14px; text-align: center; flex: none; font-size: 12px; }
+.agent-state.done { color: var(--vscode-testing-iconPassed, #3fb950); }
+.agent-state.failed { color: var(--vscode-errorForeground); }
+.agent-item { gap: 8px; }
+.agent-item-name { font-weight: 500; }
+.agent-open { flex: none; margin-left: 6px; padding: 1px 8px; border-radius: 6px; font-size: 11px; color: var(--muted); border: 1px solid var(--line); opacity: 0; }
+.agent-row:hover .agent-open, .agent-open:focus-visible { opacity: 1; }
+.agent-open:hover { color: var(--vscode-foreground); background: var(--soft); }
+.agent-panel { position: fixed; inset: 0; z-index: 30; display: flex; flex-direction: column; background: var(--vscode-sideBar-background, var(--vscode-editor-background)); }
+.agent-panel.enter { animation: rise .18s var(--ease); }
+.ap-head { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-bottom: 1px solid var(--line); }
+.ap-title { flex: 1; min-width: 0; }
+.ap-name { display: flex; align-items: center; gap: 8px; }
+.ap-name b { font-weight: 600; }
+.ap-meta { font-size: 11.5px; color: var(--muted); margin-top: 2px; font-variant-numeric: tabular-nums; }
+.ap-head .icon-btn:last-child svg { transform: rotate(-90deg); }
+.ap-body { flex: 1; overflow: auto; padding: 12px 18px 24px; display: flex; flex-direction: column; gap: 10px; overscroll-behavior: contain; }
+.ap-body:focus-visible { outline: 1px solid var(--vscode-focusBorder); outline-offset: -2px; }
+.ap-empty { margin: auto; }
+.ae-prompt { border: 1px solid var(--line); border-radius: 10px; padding: 8px 12px; background: color-mix(in srgb, var(--vscode-foreground) 5%, transparent); }
+.ae-label { font-size: 10.5px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); margin-bottom: 4px; }
+.ae-prompt .msg { max-height: 220px; overflow: auto; font-size: 0.93em; }
+.ae-think > summary, .ae-tool > summary { display: flex; align-items: center; gap: 8px; cursor: pointer; list-style: none; padding: 2px 0; color: var(--muted); }
+.ae-think > summary::-webkit-details-marker, .ae-tool > summary::-webkit-details-marker { display: none; }
+.ae-think > summary svg { width: 13px; height: 13px; }
+.ae-tool > summary { color: var(--vscode-foreground); }
+.ae-tool > summary .tool-target { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.ae-dot { width: 6px; height: 6px; border-radius: 50%; flex: none; background: var(--muted); }
+.ae-dot.done { background: var(--vscode-testing-iconPassed, #3fb950); }
+.ae-dot.failed { background: var(--vscode-errorForeground); }
+.ae-dot.running { background: var(--omp-purple); }
+.ae-tool .io { margin: 6px 0 2px 14px; }
+.ae-tool .io pre { max-height: 260px; }
+.ae-text { padding-left: 14px; border-left: 2px solid var(--line); }
+
+/* background jobs panel */
+.jp-tabs { padding: 8px 12px 4px; }
+.jp-list { flex: 0 1 auto; max-height: 38vh; overflow: auto; padding: 4px 8px; border-bottom: 1px solid var(--line); display: flex; flex-direction: column; gap: 1px; overscroll-behavior: contain; }
+.jp-row { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 6px; text-align: left; width: 100%; min-width: 0; }
+.jp-row:hover { background: var(--soft); }
+.jp-row.on { background: color-mix(in srgb, var(--vscode-focusBorder) 16%, transparent); }
+.jp-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.jp-id { font-family: var(--mono); font-size: 11px; color: var(--muted); flex: none; }
+.jp-row .desc { margin-left: 0; flex: none; font-variant-numeric: tabular-nums; }
+.jp-out { flex: 1; min-height: 0; display: flex; flex-direction: column; padding: 10px 14px 14px; gap: 8px; }
+.jp-out-head { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.jp-out-head b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.jp-out .codeblock { flex: 1; min-height: 0; display: flex; margin: 0; }
+.jp-out .codeblock pre { flex: 1; overflow: auto; white-space: pre-wrap; word-break: break-word; font-size: 12px; }
+.job-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 260px; }

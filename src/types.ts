@@ -129,6 +129,8 @@ export type HostMessage =
   | { type: 'insert'; text: string; inline?: boolean; replace?: boolean; images?: { mimeType: string; data: string }[] }
   | { type: 'files'; query: string; files: string[] }
   | { type: 'approval'; value: string }
+  | { type: 'jobs'; tab: string; jobs: import('./stats.ts').JobInfo[] }
+  | { type: 'agentConversation'; toolId: string; name: string; entries: import('./stats.ts').AgentEntry[]; model?: string; cost: number; missing?: boolean }
   | { type: 'agentSteps'; toolId: string; name: string; steps: { tool?: string; label: string; status: 'running' | 'done' | 'failed' }[]; model?: string; cost: number }
 
 /** Webview → host messages. */
@@ -156,6 +158,8 @@ export type WebviewMessage =
   | { type: 'setApproval'; value: string }
   | { type: 'agentSteps'; tab: string; toolId: string; name: string }
   | { type: 'runInTerminal'; tab: string; toolId: string }
+  | { type: 'agentConversation'; tab: string; toolId: string; name: string }
+  | { type: 'jobs'; tab: string }
   | { type: 'addSelection' }
   | { type: 'mentionPaths'; paths: string[] }
   | { type: 'exportChat'; tab: string; markdown: string }

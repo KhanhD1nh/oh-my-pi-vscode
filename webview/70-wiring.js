@@ -9,6 +9,8 @@ function render() {
   if (S.fade) { app.children[1]?.classList.add('fade'); S.fade = false }
   const ta = document.getElementById('input')
   if (ta && S.active) { ta.value = S.drafts[S.active] ?? ''; autosize(ta) }
+  if (agentView.open && S.view === 'chat') renderAgentPanel()
+  if (jobView.open && S.view === 'chat') renderJobPanel()
 }
 
 document.addEventListener('click', (e) => {
@@ -48,6 +50,7 @@ window.addEventListener('message', ({ data: m }) => {
       if (i < 0) return
       const was = S.tabs[i]
       S.tabs[i] = m.tab
+      if (!m.tab.busy && was.busy && m.tab.id === S.active) refreshJobs()
       if (m.tab.busy && !was.busy) { const st = (STAT[m.tab.id] ??= { chars: 0, total: 0, t0: 0, last: 0 }); st.chars = 0; st.t0 = 0 }
       if (m.tab.id === S.active) { refreshStatus(); refreshGoal() }
       if (S.view !== 'chat') return
@@ -78,6 +81,15 @@ window.addEventListener('message', ({ data: m }) => {
       S.settings = m
       if (S.view !== 'settings') return
       if (firstLoad || m.status !== 'ready') render(); else renderSettingsList()
+      return
+    }
+    case 'jobs': { if (m.tab !== S.active) return; const same = JSON.stringify(JOBS[m.tab]) === JSON.stringify(m.jobs); JOBS[m.tab] = m.jobs; if (!same) { refreshComposer(); renderJobPanel() } return }
+    case 'agentConversation': {
+      const o = agentView.open
+      if (!o || o.toolId !== m.toolId || o.name !== m.name) return
+      const same = agentView.data && JSON.stringify(agentView.data.entries) === JSON.stringify(m.entries) && agentView.data.cost === m.cost
+      agentView.data = m
+      if (!same || !document.getElementById('agent-panel')) renderAgentPanel()
       return
     }
     case 'agentSteps': {
