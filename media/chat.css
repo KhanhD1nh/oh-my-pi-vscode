@@ -890,3 +890,9 @@ body.vscode-high-contrast .to-latest { border-color: var(--vscode-contrastBorder
 .ssh-bar .ssh-form { margin-top: 6px; }
 .need-btn.secondary { background: var(--soft); color: var(--vscode-foreground); border: 1px solid var(--line); }
 .need-btn.secondary:hover { background: color-mix(in srgb, var(--vscode-foreground) 10%, transparent); }
+
+/* next-message prediction: ghost text laid over the empty input */
+.ghost { position: absolute; pointer-events: none; color: var(--muted); opacity: .75; white-space: pre-wrap; overflow: hidden; display: flex; gap: 8px; align-items: baseline; z-index: 1; }
+.ghost-key { font-size: 10.5px; border: 1px solid var(--line); border-radius: 4px; padding: 0 5px; opacity: .8; flex: none; }
+#input[data-ghost]::placeholder { color: transparent; }
+.composer .ghost { top: 0; left: 0; right: 0; padding: 11px 14px 4px; line-height: 1.5; font: inherit; }

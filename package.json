@@ -2,7 +2,7 @@
   "name": "oh-my-pi",
   "displayName": "Oh My Pi",
   "description": "Chat with the omp coding agent inside VS Code: streaming replies, tool cards, diffs, model picker and every omp setting.",
-  "version": "0.32.1",
+  "version": "0.33.0",
   "publisher": "khanhd1nh",
   "license": "MIT",
   "repository": {
@@ -247,6 +247,16 @@
           "default": 3,
           "minimum": 1,
           "description": "Autopilot: a wait with no background job left is nudged after this many minutes (one with jobs still running after 5× this)."
+        },
+        "ohMyPi.predictions": {
+          "type": "boolean",
+          "default": true,
+          "description": "After each turn, ask a small model for your likely next message and show it as ghost text in the empty input (Tab or → accepts). One extra, small billed request per turn."
+        },
+        "ohMyPi.predictions.model": {
+          "type": "string",
+          "default": "smol",
+          "description": "Model for predictions: an omp role (smol, default…) or a model name."
         },
         "ohMyPi.compact": {
           "type": "boolean",

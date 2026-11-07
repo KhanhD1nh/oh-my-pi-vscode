@@ -762,6 +762,7 @@ function refreshComposer() {
   const fresh = composer(); old.replaceWith(fresh)
   const nt = document.getElementById('input'); nt.value = v; autosize(nt)
   if (focused) { nt.focus(); nt.setSelectionRange(pos, pos) }
+  syncGhost()
 }
 
 // menus: model, thinking, /commands, @files
@@ -1076,6 +1077,7 @@ function render() {
   if (S.fade) { app.children[1]?.classList.add('fade'); S.fade = false }
   const ta = document.getElementById('input')
   if (ta && S.active) { ta.value = S.drafts[S.active] ?? ''; autosize(ta) }
+  if (S.view === 'chat') syncGhost()
   if (agentView.open && S.view === 'chat') renderAgentPanel()
   if (jobView.open && S.view === 'chat') renderJobPanel()
 }
@@ -1153,6 +1155,7 @@ window.addEventListener('message', ({ data: m }) => {
       if (firstLoad || m.status !== 'ready') render(); else renderSettingsList()
       return
     }
+    case 'prediction': S.predict ??= {}; S.predict[m.tab] = m.text; if (m.tab === S.active) syncGhost(); return
     case 'sshKeys': SSH.keys = m.keys; for (const it of items()) if (it.type === 'tool' && it.card.needsInput) refreshSsh(it.card.id); return
     case 'unlocked': {
       for (const [id, st] of Object.entries(SSH.state)) if (st.busy && st.key === m.key) SSH.state[id] = m.ok ? { ok: true } : { key: m.key, error: m.message }
@@ -1687,6 +1690,36 @@ document.addEventListener('keydown', e => {
     next?.scrollIntoView({ block: 'start', behavior: 'smooth' })
   }
 })
+
+// ───────────── next-message prediction (ghost text) ─────────────
+/** Shown only while the input is empty; Tab or → (at the end) takes it, typing anything hides it. */
+function syncGhost() {
+  const ta = document.getElementById('input'); if (!ta) return
+  let g = document.getElementById('ghost')
+  const text = S.predict?.[S.active] ?? ''
+  const show = text && !ta.value && !tab().busy && !S.menu
+  if (!show) { g?.remove(); ta.removeAttribute('data-ghost'); return }
+  if (!g) {
+    g = h('div', { id: 'ghost', class: 'ghost', 'aria-hidden': 'true' })
+    ta.parentElement.insertBefore(g, ta)
+  }
+  g.replaceChildren(h('span', {}, text), h('span', { class: 'ghost-key' }, 'Tab'))
+  ta.setAttribute('data-ghost', '1')
+  ta.setAttribute('aria-description', `Suggestion: ${text}. Press Tab to use it.`)
+}
+function takeGhost(ta) {
+  const text = S.predict?.[S.active]; if (!text) return false
+  ta.value = text; S.predict[S.active] = ''
+  ta.dispatchEvent(new Event('input', { bubbles: true }))
+  ta.setSelectionRange(text.length, text.length)
+  syncGhost(); return true
+}
+document.addEventListener('keydown', e => {
+  const ta = e.target; if (!(ta instanceof HTMLTextAreaElement) || ta.id !== 'input' || ta.value || !document.getElementById('ghost')) return
+  if ((e.key === 'Tab' && !e.shiftKey) || e.key === 'ArrowRight') { if (takeGhost(ta)) e.preventDefault() }
+  else if (e.key === 'Escape') { S.predict[S.active] = ''; syncGhost() }
+}, true)
+document.addEventListener('input', e => { if (e.target?.id === 'input') syncGhost() })
 
 // Boot: must run after every declaration above.
 // boot last: every const above must exist before the first render

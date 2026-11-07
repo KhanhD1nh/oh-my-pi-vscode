@@ -137,6 +137,7 @@ export type HostMessage =
   | { type: 'approval'; value: string }
   | { type: 'jobs'; tab: string; jobs: import('./stats.ts').JobInfo[] }
   | { type: 'sshKeys'; keys: string[] }
+  | { type: 'prediction'; tab: string; text: string }
   | { type: 'unlocked'; key: string; ok: boolean; message: string }
   | { type: 'agentConversation'; toolId: string; name: string; entries: import('./stats.ts').AgentEntry[]; model?: string; cost: number; missing?: boolean }
   | { type: 'agentSteps'; toolId: string; name: string; steps: { tool?: string; label: string; status: 'running' | 'done' | 'failed' }[]; model?: string; cost: number }

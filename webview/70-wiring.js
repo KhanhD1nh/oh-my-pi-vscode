@@ -9,6 +9,7 @@ function render() {
   if (S.fade) { app.children[1]?.classList.add('fade'); S.fade = false }
   const ta = document.getElementById('input')
   if (ta && S.active) { ta.value = S.drafts[S.active] ?? ''; autosize(ta) }
+  if (S.view === 'chat') syncGhost()
   if (agentView.open && S.view === 'chat') renderAgentPanel()
   if (jobView.open && S.view === 'chat') renderJobPanel()
 }
@@ -86,6 +87,7 @@ window.addEventListener('message', ({ data: m }) => {
       if (firstLoad || m.status !== 'ready') render(); else renderSettingsList()
       return
     }
+    case 'prediction': S.predict ??= {}; S.predict[m.tab] = m.text; if (m.tab === S.active) syncGhost(); return
     case 'sshKeys': SSH.keys = m.keys; for (const it of items()) if (it.type === 'tool' && it.card.needsInput) refreshSsh(it.card.id); return
     case 'unlocked': {
       for (const [id, st] of Object.entries(SSH.state)) if (st.busy && st.key === m.key) SSH.state[id] = m.ok ? { ok: true } : { key: m.key, error: m.message }

@@ -12,6 +12,7 @@ import type { OmpConfigCli } from './settings.ts'
 import { SettingsPane } from './settingsPane.ts'
 import { sessionJobs, sessionStats } from './stats.ts'
 import { longWait, nudgePrompt, shouldNudge } from './autopilot.ts'
+import { predictNext } from './predict.ts'
 import type { AgentModelChoice, ChatItem, HostMessage, SessionStats, TabState, WebviewMessage } from './types.ts'
 
 export const PANEL_TYPE = 'ohMyPi.panel'
@@ -94,7 +95,8 @@ export class ChatProvider implements vscode.WebviewViewProvider {
     if (!s.busy) this.flushUpserts()
     const was = this.wasBusy.get(s.id) ?? false
     this.wasBusy.set(s.id, s.busy)
-    if (was && !s.busy) this.notifyDone(s)
+    if (was && !s.busy) { this.notifyDone(s); void this.predict(s) }
+    if (!was && s.busy) { this.predicting.get(s.id)?.abort(); this.postTab(s.id, { type: 'prediction', tab: s.id, text: '' }) }
     this.postTab(s.id, { type: 'tab', tab: this.tabState(s) })
     this.tickTitles()
     // Sidebar follows title changes (omp names a session after its first turn) and turn ends.
@@ -340,6 +342,20 @@ export class ChatProvider implements vscode.WebviewViewProvider {
     if (got === undefined) return
     t.stats = got
     this.postTab(id, { type: 'tab', tab: this.tabState(t.session) })
+  }
+
+  private readonly predicting = new Map<string, AbortController>()
+  /** After a turn: ask a small model for your likely next message (setting ohMyPi.predictions; one extra billed call). */
+  private async predict(s: OmpSession): Promise<void> {
+    const cfg = vscode.workspace.getConfiguration('ohMyPi')
+    if (!cfg.get<boolean>('predictions', true) || s.queue.length) return
+    const t = this.tab(s.id); if (!t) return
+    this.predicting.get(s.id)?.abort()
+    const ac = new AbortController(); this.predicting.set(s.id, ac)
+    const text = await predictNext(await this.command(), t.cwd, s.transcript.items, cfg.get<string>('predictions.model', 'smol') || 'smol', ac.signal).catch(() => '')
+    if (ac.signal.aborted || s.busy) return
+    this.predicting.delete(s.id)
+    if (text) this.postTab(s.id, { type: 'prediction', tab: s.id, text })
   }
 
   /** A chat finished while you were elsewhere: toast with a jump back (setting ohMyPi.notifyOnDone). */

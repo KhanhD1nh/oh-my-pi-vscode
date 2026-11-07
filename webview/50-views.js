@@ -171,6 +171,7 @@ function refreshComposer() {
   const fresh = composer(); old.replaceWith(fresh)
   const nt = document.getElementById('input'); nt.value = v; autosize(nt)
   if (focused) { nt.focus(); nt.setSelectionRange(pos, pos) }
+  syncGhost()
 }
 
 // menus: model, thinking, /commands, @files
