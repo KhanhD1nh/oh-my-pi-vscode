@@ -13,6 +13,7 @@ import { SettingsPane } from './settingsPane.ts'
 import { sessionJobs, sessionStats } from './stats.ts'
 import { longWait, nudgePrompt, shouldNudge } from './autopilot.ts'
 import { predictNext } from './predict.ts'
+import { lockKey, sshKeys } from './sshUnlock.ts'
 import type { AgentModelChoice, ChatItem, HostMessage, SessionStats, TabState, WebviewMessage } from './types.ts'
 
 export const PANEL_TYPE = 'ohMyPi.panel'
@@ -95,7 +96,12 @@ export class ChatProvider implements vscode.WebviewViewProvider {
     if (!s.busy) this.flushUpserts()
     const was = this.wasBusy.get(s.id) ?? false
     this.wasBusy.set(s.id, s.busy)
-    if (was && !s.busy) { this.notifyDone(s); void this.predict(s) }
+    if (was && !s.busy) {
+      this.notifyDone(s); void this.predict(s)
+      // the turn that needed the key is over: take the key back (unless omp is about to continue on its own)
+      if (vscode.workspace.getConfiguration('ohMyPi').get<string>('ssh.keepKey', 'turn') === 'turn')
+        setTimeout(() => { if (!s.busy && !s.queue.length) for (const [k, u] of this.unlocked) if (u.session === s.id) void this.relock(k, 'turn finished') }, 1500)
+    }
     if (!was && s.busy) { this.predicting.get(s.id)?.abort(); this.postTab(s.id, { type: 'prediction', tab: s.id, text: '' }) }
     this.postTab(s.id, { type: 'tab', tab: this.tabState(s) })
     this.tickTitles()
@@ -344,6 +350,33 @@ export class ChatProvider implements vscode.WebviewViewProvider {
     this.postTab(id, { type: 'tab', tab: this.tabState(t.session) })
   }
 
+  /** Keys unlocked from the chat: which session asked, and the hard expiry timer. */
+  private readonly unlocked = new Map<string, { session: string; timer: ReturnType<typeof setTimeout> }>()
+  /** A key was unlocked for `session`: keep it only for that work (setting ohMyPi.ssh.keepKey). */
+  keyUnlocked(key: string, session: string): void {
+    const cfg = vscode.workspace.getConfiguration('ohMyPi')
+    if (cfg.get<string>('ssh.keepKey', 'turn') === 'always') return
+    clearTimeout(this.unlocked.get(key)?.timer)
+    const minutes = Math.max(1, cfg.get<number>('ssh.keyMinutes', 30))
+    this.unlocked.set(key, { session, timer: setTimeout(() => { void this.relock(key, `after ${minutes} min`) }, minutes * 60_000) })
+  }
+  private async relock(key: string, why: string): Promise<void> {
+    const u = this.unlocked.get(key); if (!u) return
+    clearTimeout(u.timer); this.unlocked.delete(key)
+    if (!await lockKey(key)) return
+    const t = this.tab(u.session)
+    if (t) { t.session.events_notice(`SSH key ${key.split(/[\\/]/u).pop()} removed from ssh-agent (${why}) — omp can no longer reach the server`); this.postTab(u.session, { type: 'sshLocked', key }) }
+  }
+  /** Remove every key from ~/.ssh that is in ssh-agent (also ones loaded outside the chat). @returns how many. */
+  async lockAllKeys(): Promise<number> {
+    await this.relockAll()
+    let n = 0
+    for (const k of await sshKeys()) if (await lockKey(k)) n++
+    return n
+  }
+  /** VS Code is closing: no key unlocked from the chat survives it. */
+  async relockAll(): Promise<void> { await Promise.all([...this.unlocked.keys()].map(k => this.relock(k, 'VS Code closed'))) }
+
   private readonly predicting = new Map<string, AbortController>()
   /** After a turn: ask a small model for your likely next message (setting ohMyPi.predictions; one extra billed call). */
   private async predict(s: OmpSession): Promise<void> {
@@ -380,5 +413,6 @@ export class ChatProvider implements vscode.WebviewViewProvider {
     }
   }
 
-  dispose(): void { this.status.dispose(); clearInterval(this.spinner); clearInterval(this.watchdog); for (const h of this.hosts.values()) h.dispose() }
+  dispose(): void {
+    void this.relockAll(); this.status.dispose(); clearInterval(this.spinner); clearInterval(this.watchdog); for (const h of this.hosts.values()) h.dispose() }
 }

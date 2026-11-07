@@ -12,6 +12,11 @@ const WIN = process.platform === 'win32'
 /** Windows OpenSSH talks to the Windows ssh-agent service (the one omp's ssh uses after the PATH fix). */
 const sshAdd = () => WIN && existsSync('C:\\Windows\\System32\\OpenSSH\\ssh-add.exe') ? 'C:\\Windows\\System32\\OpenSSH\\ssh-add.exe' : 'ssh-add'
 
+/** Remove `key` from ssh-agent (by its private key path; Windows ssh-agent refuses removal by .pub). */
+export function lockKey(key: string): Promise<boolean> {
+  return new Promise(resolve => { execFile(sshAdd(), ['-d', key], { timeout: 10_000, windowsHide: true }, err => resolve(!err)).stdin?.end() })
+}
+
 /** Private keys in ~/.ssh: files that have a matching .pub. */
 export async function sshKeys(): Promise<string[]> {
   const dir = join(homedir(), '.ssh')

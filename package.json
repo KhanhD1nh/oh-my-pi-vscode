@@ -2,7 +2,7 @@
   "name": "oh-my-pi",
   "displayName": "Oh My Pi",
   "description": "Chat with the omp coding agent inside VS Code: streaming replies, tool cards, diffs, model picker and every omp setting.",
-  "version": "0.33.3",
+  "version": "0.34.0",
   "publisher": "khanhd1nh",
   "license": "MIT",
   "repository": {
@@ -43,6 +43,10 @@
       ]
     },
     "commands": [
+      {
+        "command": "ohMyPi.lockSshKeys",
+        "title": "Oh My Pi: Lock SSH keys now (remove from ssh-agent)"
+      },
       {
         "command": "ohMyPi.newSession",
         "title": "Oh My Pi: New Tab",
@@ -257,6 +261,23 @@
           "type": "string",
           "default": "smol",
           "description": "Model for predictions: an omp role (smol, default…) or a model name."
+        },
+        "ohMyPi.ssh.keepKey": {
+          "type": "string",
+          "enum": ["turn", "timer", "always"],
+          "enumDescriptions": [
+            "Remove the key from ssh-agent as soon as the turn that needed it ends (or after ohMyPi.ssh.keyMinutes).",
+            "Keep it for ohMyPi.ssh.keyMinutes, then remove it.",
+            "Leave it in ssh-agent (omp can reach the server until you remove it yourself)."
+          ],
+          "default": "turn",
+          "description": "How long an SSH key unlocked from the chat stays usable by omp."
+        },
+        "ohMyPi.ssh.keyMinutes": {
+          "type": "number",
+          "default": 30,
+          "minimum": 1,
+          "description": "Longest time an SSH key unlocked from the chat stays in ssh-agent."
         },
         "ohMyPi.compact": {
           "type": "boolean",

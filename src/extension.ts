@@ -27,6 +27,7 @@ export function activate(context: vscode.ExtensionContext): void {
   }))
 
   const chats = new ChatProvider(context, command, cli, output, diffBefore)
+  active = chats
   /** Uri passed by a menu (Explorer / editor context), else the active editor's file. */
   const fileOf = (uri?: vscode.Uri) => uri instanceof vscode.Uri ? uri : vscode.window.activeTextEditor?.document.uri
   context.subscriptions.push(
@@ -34,6 +35,7 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.window.registerWebviewViewProvider('ohMyPi.chat', chats, { webviewOptions: { retainContextWhenHidden: true } }),
     vscode.window.registerWebviewPanelSerializer(PANEL_TYPE, { deserializeWebviewPanel: (panel, state) => chats.restorePanel(panel, state as never) }),
     vscode.commands.registerCommand('ohMyPi.newSession', () => chats.newTab()),
+    vscode.commands.registerCommand('ohMyPi.lockSshKeys', async () => { const n = await chats.lockAllKeys(); void vscode.window.showInformationMessage(n ? `OMP: removed ${n} SSH key${n > 1 ? 's' : ''} from ssh-agent.` : 'OMP: no SSH key in ssh-agent.') }),
     vscode.commands.registerCommand('ohMyPi.history', () => chats.showView('history')),
     vscode.commands.registerCommand('ohMyPi.settings', () => chats.showView('settings')),
     vscode.commands.registerCommand('ohMyPi.focus', () => chats.focusChat()),
@@ -59,7 +61,9 @@ export function activate(context: vscode.ExtensionContext): void {
   context.subscriptions.push({ dispose: () => clearTimeout(t) })
 }
 
-export function deactivate(): void {}
+let active: ChatProvider | undefined
+/** VS Code waits for this: take back SSH keys unlocked from the chat before the window closes. */
+export function deactivate(): Promise<void> | undefined { return active?.relockAll() }
 
 /** Bundled omp extensions (fork-from-here, subagent fix) and a check that omp's session files still parse. */
 async function startupChecks(context: vscode.ExtensionContext, output: vscode.OutputChannel): Promise<void> {

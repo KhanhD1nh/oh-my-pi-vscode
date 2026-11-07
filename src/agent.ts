@@ -177,6 +177,9 @@ export class OmpSession {
 
   /** SSH cards already told to wait for your passphrase (once per card). */
   private readonly heldForKey = new Set<string>()
+  /** @internal Show a notice line in this chat (used by the host for SSH key lifecycle). */
+  events_notice(text: string): void { this.events.item(this, this.transcript.notice(text)) }
+
   /** omp was told to wait for your SSH passphrase; the stall watchdog leaves that wait alone. */
   waitingForKey = false
   /** The ask omp opened to hold its turn for the key, answered by `keyLoaded()`. */
