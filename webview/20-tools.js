@@ -17,19 +17,55 @@ function toolTarget(c) {
   try { const i = JSON.parse(c.input ?? '{}'); return { text: i.command ?? i.pattern ?? i.query ?? i.url ?? c.title } } catch { return { text: c.title } }
 }
 function diffStat(d) {
-  const a = d.oldText ? d.oldText.split('\n') : [], b = d.newText.split('\n')
+  if (d._stat) return d._stat
+  const ops = lineOps(d.oldText ? d.oldText.split('\n') : [], d.newText.split('\n'))
+  return (d._stat = { add: ops.filter(o => o[0] === '+').length, del: ops.filter(o => o[0] === '-').length })
+}
+/** Line ops between a and b: [' ', line] | ['-', line] | ['+', line]. LCS on the changed middle only. */
+function lineOps(a, b) {
   let s = 0; while (s < a.length && s < b.length && a[s] === b[s]) s++
-  let ea = a.length - 1, eb = b.length - 1; while (ea >= s && eb >= s && a[ea] === b[eb]) { ea--; eb-- }
-  return { s, ea, eb, a, b, add: Math.max(0, eb - s + 1), del: Math.max(0, ea - s + 1) }
+  let ea = a.length, eb = b.length; while (ea > s && eb > s && a[ea - 1] === b[eb - 1]) { ea--; eb-- }
+  const A = a.slice(s, ea), B = b.slice(s, eb), ops = a.slice(0, s).map(l => [' ', l])
+  // ponytail: O(n·m) table, capped; past the cap the middle shows as all removed then all added ("Open diff" is exact).
+  if (A.length * B.length > 250000) { for (const l of A) ops.push(['-', l]); for (const l of B) ops.push(['+', l]) }
+  else {
+    const T = Array.from({ length: A.length + 1 }, () => new Uint16Array(B.length + 1))
+    for (let i = A.length - 1; i >= 0; i--) for (let j = B.length - 1; j >= 0; j--) T[i][j] = A[i] === B[j] ? T[i + 1][j + 1] + 1 : Math.max(T[i + 1][j], T[i][j + 1])
+    let i = 0, j = 0
+    while (i < A.length || j < B.length) {
+      if (i < A.length && j < B.length && A[i] === B[j]) { ops.push([' ', A[i]]); i++; j++ }
+      else if (i < A.length && (j === B.length || T[i + 1][j] >= T[i][j + 1])) ops.push(['-', A[i++]])
+      else ops.push(['+', B[j++]])
+    }
+  }
+  for (const l of a.slice(ea)) ops.push([' ', l])
+  return ops
+}
+/** Words that changed between one removed and one added line, wrapped in <mark>. */
+function wordMarks(x, y) {
+  const tx = x.split(/(\s+|[^\w\s])/u).filter(Boolean), ty = y.split(/(\s+|[^\w\s])/u).filter(Boolean)
+  let s = 0; while (s < tx.length && s < ty.length && tx[s] === ty[s]) s++
+  let ex = tx.length, ey = ty.length; while (ex > s && ey > s && tx[ex - 1] === ty[ey - 1]) { ex--; ey-- }
+  const part = (t, e) => [t.slice(0, s).join(''), h('mark', {}, t.slice(s, e).join('')), t.slice(e).join('')]
+  return [part(tx, ex), part(ty, ey)]
 }
 function diffEl(d) {
-  const { s, ea, eb, a, b } = diffStat(d)
-  // ponytail: prefix/suffix trim, not a full LCS diff; the "Open diff" action shows the exact one.
-  const rows = []
-  for (let i = Math.max(0, s - 2); i < s; i++) rows.push(h('div', { class: 'd ctx' }, '  ' + a[i]))
-  for (let i = s; i <= ea; i++) rows.push(h('div', { class: 'd del' }, '- ' + a[i]))
-  for (let i = s; i <= eb; i++) rows.push(h('div', { class: 'd add' }, '+ ' + b[i]))
-  for (let i = eb + 1; i < Math.min(b.length, eb + 3); i++) rows.push(h('div', { class: 'd ctx' }, '  ' + b[i]))
+  const ops = lineOps(d.oldText ? d.oldText.split('\n') : [], d.newText.split('\n'))
+  // keep changed lines and 2 lines of context around them; gaps become "⋯"
+  const keep = ops.map(() => false)
+  ops.forEach(([k], i) => { if (k !== ' ') for (let j = Math.max(0, i - 2); j <= Math.min(ops.length - 1, i + 2); j++) keep[j] = true })
+  const rows = []; let gap = false
+  for (let i = 0; i < ops.length; i++) {
+    if (!keep[i]) { if (!gap && rows.length) rows.push(h('div', { class: 'd gap' }, '⋯')); gap = true; continue }
+    gap = false
+    const [k, l] = ops[i]
+    // a single removed line followed by a single added line: mark the words that changed
+    if (k === '-' && ops[i + 1]?.[0] === '+' && ops[i + 2]?.[0] !== '+' && ops[i - 1]?.[0] !== '-') {
+      const [mx, my] = wordMarks(l, ops[i + 1][1])
+      rows.push(h('div', { class: 'd del' }, h('span', { class: 'd-k' }, '-'), mx), h('div', { class: 'd add' }, h('span', { class: 'd-k' }, '+'), my)); i++; continue
+    }
+    rows.push(h('div', { class: `d ${k === '+' ? 'add' : k === '-' ? 'del' : 'same'}` }, h('span', { class: 'd-k' }, k === ' ' ? '' : k), l))
+  }
   return h('div', { class: 'diff' }, rows)
 }
 /** Claude Code–style step: bullet on a timeline, verb + target, then an IN/OUT box (bash) or inline diff (edit). */

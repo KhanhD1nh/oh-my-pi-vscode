@@ -13,6 +13,23 @@ function textOf(content: unknown): string {
   return c?.type === 'text' && typeof c.text === 'string' ? c.text : ''
 }
 
+/**
+ * Bash output without omp's bookkeeping: the echoed "$ command" line, "Ignored ready: …", "Wall time: …" and the
+ * long "Backgrounded as job …" instructions meant for the model. The job id stays ("Backgrounded as job bg_3.").
+ */
+export function cleanOutput(text: string, command?: string): string {
+  let t = text
+    .replace(/^Ignored ready: [^\n]*\n?/gmu, '')
+    .replace(/^Wall time: [^\n]*\n?/gmu, '')
+    .replace(/^Backgrounded early to handle an incoming message[^\n]*\n?/gmu, '')
+    .replace(/Backgrounded as job (\S+?) \([\s\S]*$/u, 'Backgrounded as job $1.')
+  if (command) {
+    const first = `$ ${command.split('\n')[0]}`
+    if (t.startsWith(first)) t = t.slice(first.length)
+  }
+  return t.replace(/^\s*\n/u, '').replace(/\s+$/u, '')
+}
+
 /** Text carried by a tool update's `content` and `rawOutput.content`, deduplicated. */
 export function toolOutput(update: Update): string {
   const texts: string[] = []
@@ -141,7 +158,11 @@ export class Transcript {
       const raw = JSON.stringify(update.rawInput)
       card.input = raw.length > 4000 ? `${raw.slice(0, 4000)}…` : raw
     }
-    const out = toolOutput(update)
+    let out = toolOutput(update)
+    if (out !== '' && (card.kind === 'execute' || card.name === 'bash')) {
+      let cmd: string | undefined; try { cmd = (JSON.parse(card.input ?? '{}') as { command?: string }).command } catch { cmd = undefined }
+      out = cleanOutput(out, cmd) || out
+    }
     if (out !== '') card.output = out
     const diff = toolDiff(update)
     if (diff !== undefined) { card.diff = diff; card.path ??= diff.path }

@@ -15,21 +15,21 @@ const fmtTok = n => n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : n >= 1e3 ? `${(n / 1
 const fmtDur = ms => { const m = Math.floor(ms / 60000); return m >= 60 ? `${Math.floor(m / 60)}h${m % 60 ? ` ${m % 60}m` : ''}` : m ? `${m}m` : `${Math.floor(ms / 1000)}s` }
 function statusLine() {
   const t = tab(); const s = STAT[S.active] ?? { chars: 0, total: 0, t0: 0, last: 0 }
-  const seg = (cls, icon, text, title) => text ? h('span', { class: `seg ${cls}`, title }, icon ? h('span', { class: 'seg-i' }, icon) : null, text) : null
+  const seg = (cls, icon, text, title) => text ? h('span', { class: `seg ${cls}`, title }, icon ? h('span', { class: 'seg-i' }, ICON[icon] ? svg(ICON[icon]) : icon) : null, text) : null
   const u = t.usage ?? {}
   const pct = u.size ? (u.used ?? 0) / u.size * 100 : null
   const secs = s.t0 && s.last > s.t0 ? (s.last - s.t0) / 1000 : 0
   const rate = t.busy && secs > 1 ? (s.chars / 4 / secs).toFixed(1) : null
   return h('div', { class: 'statusline', id: 'statusline' },
-    seg('time', '⏱', t.startedAt ? fmtDur(Date.now() - t.startedAt) : '', 'Tab open for'),
-    seg('path', '▣', t.folder ?? '', S.cwd),
-    seg('git', '⎇', t.branch ?? '', 'Git branch'),
+    seg('time', 'clock', t.startedAt ? fmtDur(Date.now() - t.startedAt) : '', 'Tab open for'),
+    seg('path', 'folder', t.folder ?? '', S.cwd),
+    seg('git', 'branch', t.branch ?? '', 'Git branch'),
     h('span', { class: 'grow' }),
     seg('ctx', '', pct === null ? '' : `${pct.toFixed(1)}% · ${fmtTok(u.used ?? 0)}/${fmtTok(u.size)}`, 'Context used (omp)'),
-    t.stats ? seg('tin', '↓', fmtTok(t.stats.input), 'Input tokens (omp session)') : null,
-    t.stats || s.total ? seg('out', '↑', t.stats && !t.busy ? fmtTok(t.stats.output) : fmtTok((t.stats?.output ?? 0) + Math.round(s.chars / 4)), 'Output tokens (omp session' + (t.busy ? ' + streaming estimate)' : ')')) : null,
-    t.stats?.cacheRead ? seg('cache', '⛁', fmtTok(t.stats.cacheRead), `Cache read${t.stats.input + t.stats.cacheRead ? ` · ${(t.stats.cacheRead / (t.stats.input + t.stats.cacheRead) * 100).toFixed(0)}% hit` : ''}`) : null,
-    seg('rate', '⚡', rate ? `${rate} tok/s` : t.stats?.apiMs ? `${(t.stats.output / (t.stats.apiMs / 1000)).toFixed(1)} tok/s` : '', rate ? 'Output speed now (estimated)' : 'Average model speed (omp session)'),
+    t.stats ? seg('tin', 'down', fmtTok(t.stats.input), 'Input tokens (omp session)') : null,
+    t.stats || s.total ? seg('out', 'upArrow', t.stats && !t.busy ? fmtTok(t.stats.output) : fmtTok((t.stats?.output ?? 0) + Math.round(s.chars / 4)), 'Output tokens (omp session' + (t.busy ? ' + streaming estimate)' : ')')) : null,
+    t.stats?.cacheRead ? seg('cache', 'db', fmtTok(t.stats.cacheRead), `Cache read${t.stats.input + t.stats.cacheRead ? ` · ${(t.stats.cacheRead / (t.stats.input + t.stats.cacheRead) * 100).toFixed(0)}% hit` : ''}`) : null,
+    seg('rate', 'bolt', rate ? `${rate} tok/s` : t.stats?.apiMs ? `${(t.stats.output / (t.stats.apiMs / 1000)).toFixed(1)} tok/s` : '', rate ? 'Output speed now (estimated)' : 'Average model speed (omp session)'),
     seg('cost', '', (u.cost ?? t.stats?.cost) ? '$' + (u.cost ?? t.stats.cost).toFixed((u.cost ?? t.stats.cost) < 1 ? 3 : 2) : '', 'Session cost (omp)'))
 }
 /** Rebuild the status line only when what it shows changed (it is asked every second). */
@@ -59,10 +59,12 @@ function bgChip() {
   const { agents, jobs: cards } = activity()
   const jobs = bgJobs().length ? bgJobs() : cards.map(c => ({ status: 'running' }))
   if (!agents.length && !jobs.length) return null
-  const live = agents.filter(a => a.running).length
-  const label = [agents.length ? (live ? `${live}/${agents.length} agents` : `${agents.length} agent${agents.length > 1 ? 's' : ''}`) : '', jobs.length ? `${jobs.filter(j => j.status === 'running').length ? jobs.filter(j => j.status === 'running').length + '/' : ''}${jobs.length} bg` : ''].filter(Boolean).join(' · ')
+  // "2 running" first and bold; totals after it, dimmed — the totals are history, not what runs now
+  const live = agents.filter(a => a.running).length + jobs.filter(j => j.status === 'running').length
+  const totals = [agents.length ? `${agents.length} agent${agents.length > 1 ? 's' : ''}` : '', jobs.length ? `${jobs.length} bg` : ''].filter(Boolean).join(' · ')
+  const label = live ? [h('b', { class: 'chip-live' }, `${live} running`), h('span', { class: 'chip-total' }, ` · ${totals}`)] : [h('span', { class: 'chip-total' }, `${totals} · done`)]
   const failed = jobs.filter(j => j.status === 'failed').length + agents.filter(a => a.failed).length
-  return h('button', { class: `chip-btn jobs${S.menu === 'jobs' ? ' open' : ''}${failed ? ' has-failed' : ''}`, title: 'Subagents and background jobs', onclick: () => openMenu('jobs') }, agents.some(a => a.running) || jobs.some(j => j.status === 'running') ? runDot() : (agents.length || jobs.length) ? h('span', { class: 'agent-done-dot', 'aria-hidden': 'true' }) : h('span', { class: 'live busy' }), h('span', { class: 'label' }, label), failed ? h('span', { class: 'chip-failed', title: `${failed} failed` }, `${failed} ✕`) : null)
+  return h('button', { class: `chip-btn jobs${S.menu === 'jobs' ? ' open' : ''}${failed ? ' has-failed' : ''}${live ? '' : ' idle'}`, title: live ? `${live} running now · ${totals} in this chat` : `Nothing running · ${totals} in this chat`, onclick: () => openMenu('jobs') }, agents.some(a => a.running) || jobs.some(j => j.status === 'running') ? runDot() : (agents.length || jobs.length) ? h('span', { class: 'agent-state done', 'aria-hidden': 'true' }, '✓') : h('span', { class: 'live busy' }), h('span', { class: 'label' }, label), failed ? h('span', { class: 'chip-failed', title: `${failed} failed` }, `${failed} ✕`) : null)
 }
 let jobTick = 0
 EVERY_SECOND.push(() => { if (S.view === 'chat' && tab()?.busy && ++jobTick % 5 === 0) refreshJobs() })

@@ -70,6 +70,7 @@ function keepScrolledParts(old, fresh) {
 function upsertNode(it) {
   if (!transcriptEl) return
   transcriptEl.querySelector('.empty')?.remove()
+  if (nodes.has(it.id) && nodes.get(it.id) === null) return // inside a collapsed group
   const old = nodes.get(it.id)
   // Streaming text: swap only the message body's HTML instead of rebuilding the step (keeps the node, its
   // classes and listeners; the browser re-lays out one block, not the whole step).
@@ -145,4 +146,55 @@ function syncLatest() {
   const away = t.scrollHeight - t.scrollTop - t.clientHeight > 160
   b.classList.toggle('show', away)
   if (!away) b.classList.remove('new')
+}
+
+// ───────────── grouped tool runs ─────────────
+const GROUP_MIN = 4
+const groupable = it => it.type === 'tool' && (it.card.status === 'completed' || it.card.status === 'failed') && !it.card.todo && !taskInfo(it.card) && !bgInfo(it.card) && !it.card.needsInput
+/** Runs of finished tool steps in `list` (indexes), excluding the tail of the current turn while it runs. */
+function toolRuns(list) {
+  const runs = []; let start = -1
+  const close = end => { if (start >= 0 && end - start >= GROUP_MIN) runs.push([start, end]); start = -1 }
+  list.forEach((it, i) => { if (groupable(it)) { if (start < 0) start = i } else close(i) })
+  // while busy, the newest run stays expanded: you are watching it happen
+  if (start >= 0 && !tab().busy) close(list.length); else start = -1
+  return runs
+}
+function groupSummary(its) {
+  const by = new Map(); for (const it of its) { const v = verbOf(it.card); by.set(v, (by.get(v) ?? 0) + 1) }
+  const t0 = Math.min(...its.map(x => x.card.startedAt ?? Infinity)), t1 = Math.max(...its.map(x => x.card.endedAt ?? 0))
+  return { parts: [...by].sort((a, b) => b[1] - a[1]).map(([v, n]) => `${n} ${v}`), ms: isFinite(t0) && t1 > t0 ? t1 - t0 : 0 }
+}
+function groupNode(its) {
+  const key = 'g:' + its[0].id
+  const open = S.open.has(key)
+  const { parts, ms } = groupSummary(its)
+  const el = h('div', { class: `step completed tool-group${open ? ' open' : ''}`, 'data-group': key },
+    h('div', { class: 'tool-line group-line', role: 'button', tabindex: '0', 'aria-expanded': open ? 'true' : 'false', onclick: () => toggleGroup(key), onkeydown: e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleGroup(key) } } },
+      h('span', { class: 'chev' + (open ? ' open' : '') }, '›'),
+      h('span', { class: 'tool-verb' }, `${its.length} steps`),
+      h('span', { class: 'tool-target' }, parts.slice(0, 4).join(' · ') + (parts.length > 4 ? ' …' : '')),
+      its.some(x => x.card.status === 'failed') ? h('span', { class: 'group-failed' }, `${its.filter(x => x.card.status === 'failed').length} failed`) : null,
+      ms >= 1000 ? h('span', { class: 'tool-time' }, took(ms)) : null))
+  return el
+}
+function toggleGroup(key) { S.open.has(key) ? S.open.delete(key) : S.open.add(key); const t = transcriptEl, top = t?.scrollTop; render(); if (t && transcriptEl) transcriptEl.scrollTop = top }
+
+/** "23 tools · 4 files (+120 −30) · 3m 12s" under a prompt once its turn is over. */
+function turnSummary(list, i) {
+  let j = i + 1; while (j < list.length && list[j].type !== 'user') j++
+  if (j === list.length && tab().busy) return null
+  const turn = list.slice(i + 1, j)
+  const tools = turn.filter(x => x.type === 'tool')
+  if (tools.length < 2) return null
+  const files = new Map()
+  for (const x of tools) if (x.card.diff) { const s = diffStat(x.card.diff), f = files.get(x.card.diff.path) ?? { add: 0, del: 0 }; f.add += s.add; f.del += s.del; files.set(x.card.diff.path, f) }
+  const add = [...files.values()].reduce((n, f) => n + f.add, 0), del = [...files.values()].reduce((n, f) => n + f.del, 0)
+  const failed = tools.filter(x => x.card.status === 'failed').length
+  const start = list[i].at, end = Math.max(0, ...turn.map(x => x.end ?? x.card?.endedAt ?? x.at ?? 0))
+  return h('div', { class: 'turn-sum', title: [...files.keys()].join('\n') },
+    h('span', {}, `${tools.length} tools`),
+    files.size ? h('span', {}, `${files.size} file${files.size > 1 ? 's' : ''} `, h('span', { class: 'plus' }, `+${add}`), ' ', h('span', { class: 'minus' }, `−${del}`)) : null,
+    failed ? h('span', { class: 'minus' }, `${failed} failed`) : null,
+    start && end > start ? h('span', {}, took(end - start)) : null)
 }

@@ -38,7 +38,13 @@ export class Fold {
     }
     if (e.type !== 'message') return
     const m = e.message as { role?: string; attribution?: string; duration?: number; ttft?: number; model?: string; content?: unknown; details?: { diff?: string } }
-    if (m.role === 'user' && m.attribution === 'user') s.prompts++
+    if (m.role === 'user' && m.attribution === 'user') {
+      s.prompts++
+      if ((s.text?.length ?? 0) < 2000) {
+        const t = typeof m.content === 'string' ? m.content : Array.isArray(m.content) ? (m.content as { type?: string; text?: string }[]).filter(c => c.type === 'text').map(c => c.text ?? '').join(' ') : ''
+        s.text = `${s.text ?? ''} ${t}`.slice(0, 2000)
+      }
+    }
     if (m.role === 'assistant') {
       s.apiMs += m.duration ?? 0
       if (m.duration && m.duration > (m.ttft ?? 0)) s.genMs = (s.genMs ?? 0) + (m.duration - (m.ttft ?? 0))

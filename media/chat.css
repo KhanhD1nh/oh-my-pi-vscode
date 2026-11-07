@@ -83,7 +83,7 @@ pre code { background: none; padding: 0; }
 .d { white-space: pre; padding: 0 10px; }
 .d.add { background: var(--vscode-diffEditor-insertedLineBackground, rgba(46,160,67,.18)); }
 .d.del { background: var(--vscode-diffEditor-removedLineBackground, rgba(248,81,73,.18)); }
-.d.ctx { color: var(--muted); }
+.d.same { color: var(--muted); }
 
 .working { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 0.93em; }
 .spinner { width: 12px; height: 12px; border-radius: 50%; border: 2px solid var(--line); border-top-color: var(--accent); animation: spin 0.8s linear infinite; }
@@ -730,7 +730,7 @@ body.vscode-light { --rail: color-mix(in srgb, var(--vscode-foreground) 14%, tra
 .agent-done-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--vscode-testing-iconPassed, #3fb950); flex: none; }
 .agent-state { width: 14px; text-align: center; flex: none; font-size: 12px; }
 .agent-state.done { color: var(--vscode-testing-iconPassed, #3fb950); }
-.agent-state.failed { color: var(--vscode-errorForeground); }
+.agent-state.failed { color: var(--vscode-errorForeground, #f85149); }
 .agent-item { gap: 8px; }
 .agent-item-name { font-weight: 500; }
 .agent-open { flex: none; margin-left: 6px; padding: 1px 8px; border-radius: 6px; font-size: 11px; color: var(--muted); border: 1px solid var(--line); opacity: 0; }
@@ -811,7 +811,58 @@ body.vscode-light { --rail: color-mix(in srgb, var(--vscode-foreground) 14%, tra
 .to-latest:hover { border-color: var(--omp-purple); }
 .to-latest svg { width: 14px; height: 14px; }
 .to-latest.new::after { content: ''; position: absolute; top: 1px; right: 1px; width: 8px; height: 8px; border-radius: 50%; background: var(--omp-purple); box-shadow: 0 0 0 2px var(--vscode-sideBar-background, #1f2024); }
-.chip-failed { margin-left: 6px; padding: 0 6px; border-radius: 6px; font-size: 11px; line-height: 16px; color: var(--vscode-errorForeground); background: color-mix(in srgb, var(--vscode-errorForeground) 15%, transparent); }
+.chip-failed { margin-left: 6px; padding: 0 6px; border-radius: 6px; font-size: 11px; line-height: 16px; color: var(--vscode-errorForeground, #f85149); background: color-mix(in srgb, var(--vscode-errorForeground, #f85149) 15%, transparent); }
 @media (prefers-reduced-motion: reduce) { .wait-dots i { animation: none; opacity: .6; } }
 .todo-mini { margin-left: auto; display: inline-flex; align-items: center; gap: 8px; flex: none; color: var(--muted); font-size: 11.5px; font-variant-numeric: tabular-nums; }
 .todo-mini .todo-meter { width: 46px; }
+
+/* ── grouped tool runs, turn summary ── */
+.tool-group .group-line { cursor: pointer; }
+.tool-group .tool-verb { color: var(--muted); font-weight: 500; }
+.tool-group .chev { display: inline-block; width: 10px; color: var(--muted); transition: transform .15s var(--ease); flex: none; }
+.tool-group .chev.open { transform: rotate(90deg); }
+.tool-group .tool-time { margin-left: auto; }
+.tool-group:hover .tool-verb, .tool-group .group-line:focus-visible .tool-verb { color: var(--vscode-foreground); }
+.step.in-group { padding-left: 12px; }
+.turn-sum { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 4px 10px; margin: -2px 2px 10px 0; font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.turn-sum > span + span::before { content: '·'; margin-right: 10px; opacity: .6; }
+.turn-sum > span + span::before { color: var(--muted); }
+.group-failed { margin-left: auto; flex: none; font-size: 11px; color: var(--vscode-errorForeground); }
+.group-failed + .tool-time { margin-left: 8px; }
+.chip-btn.jobs .chip-live { font-weight: 600; }
+.chip-btn.jobs .chip-total { opacity: .7; font-weight: 400; }
+.chip-btn.jobs.idle { color: var(--muted); background: var(--soft); }
+.chip-btn.jobs.idle .agent-state { font-size: 11px; width: auto; }
+
+/* ── diff gaps + word marks ── */
+.d.gap { color: var(--muted); text-align: center; opacity: .6; user-select: none; }
+.d mark { background: none; color: inherit; border-radius: 2px; }
+.d.add mark { background: color-mix(in srgb, var(--vscode-diffEditor-insertedTextBackground, rgba(46,160,67,.5)) 100%, transparent); box-shadow: 0 0 0 1px rgba(46,160,67,.25); }
+.d.del mark { background: color-mix(in srgb, var(--vscode-diffEditor-removedTextBackground, rgba(248,81,73,.5)) 100%, transparent); box-shadow: 0 0 0 1px rgba(248,81,73,.25); }
+/* ── statusline icons ── */
+.seg-i { display: inline-flex; }
+.seg-i svg { width: 12px; height: 12px; }
+/* ── code block file header, tables ── */
+.code-head { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.code-file { font-family: var(--mono); font-size: 11px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; cursor: pointer; }
+.code-file:hover { color: var(--accent); text-decoration: underline; }
+.msg .table-wrap { overflow-x: auto; margin: 8px 0; border: 1px solid var(--line); border-radius: var(--radius-sm); max-height: 480px; }
+.msg .table-wrap table { display: table; margin: 0; width: max-content; min-width: 100%; border-collapse: separate; border-spacing: 0; }
+.msg .table-wrap th { position: sticky; top: 0; background: var(--vscode-editorWidget-background, var(--vscode-sideBar-background)); z-index: 1; text-align: left; font-weight: 600; }
+.msg .table-wrap th, .msg .table-wrap td { padding: 6px 10px; border: 0; border-bottom: 1px solid var(--line); vertical-align: top; }
+.msg .table-wrap tr:last-child td { border-bottom: 0; }
+.msg .table-wrap tr:nth-child(2n+3) td { background: color-mix(in srgb, var(--vscode-foreground) 3%, transparent); }
+/* ── compact mode ── */
+body.compact { --vscode-font-size: 12px; }
+body.compact .transcript { font-size: 12.5px; }
+body.compact .step { padding-top: 0; padding-bottom: 0; }
+body.compact .tool-line { padding: 0; }
+body.compact .msg p { margin: 4px 0; }
+body.compact .io pre { max-height: 200px; }
+/* ── light / high-contrast: new parts read on any theme ── */
+body.vscode-light .to-latest { box-shadow: 0 4px 14px rgba(0,0,0,.12); }
+body.vscode-light .bg-pill { color: #1a7f37; }
+body.vscode-light .chip-failed, body.vscode-light .group-failed { color: #cf222e; }
+body.vscode-high-contrast .job-id, body.vscode-high-contrast .bg-open, body.vscode-high-contrast .chip-failed, body.vscode-high-contrast .bg-pill { border: 1px solid var(--vscode-contrastBorder, currentColor); background: none; }
+body.vscode-high-contrast .to-latest { border-color: var(--vscode-contrastBorder); box-shadow: none; }
+.d-k { display: inline-block; width: 1.6ch; user-select: none; opacity: .7; }

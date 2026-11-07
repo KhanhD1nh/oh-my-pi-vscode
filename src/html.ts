@@ -12,5 +12,5 @@ export function webviewHtml(webview: vscode.Webview, media: vscode.Uri, mode: 'p
   return `<!doctype html><html><head><meta charset="utf-8">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src ${webview.cspSource} data:; style-src ${webview.cspSource}; script-src 'nonce-${nonce}';">
 <meta name="viewport" content="width=device-width, initial-scale=1"><link rel="stylesheet" href="${style}"></head>
-<body data-mode="${mode}"${restore ? ` data-session="${encodeURIComponent(restore.sessionId)}" data-cwd="${encodeURIComponent(restore.cwd)}"` : ''}><div id="app"></div><script nonce="${nonce}" src="${script}"></script></body></html>`
+<body data-mode="${mode}"${vscode.workspace.getConfiguration('ohMyPi').get<boolean>('compact') ? ' class="compact"' : ''}${restore ? ` data-session="${encodeURIComponent(restore.sessionId)}" data-cwd="${encodeURIComponent(restore.cwd)}"` : ''}><div id="app"></div><script nonce="${nonce}" src="${script}"></script></body></html>`
 }

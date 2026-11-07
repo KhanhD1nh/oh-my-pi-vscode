@@ -2,7 +2,7 @@
   "name": "oh-my-pi",
   "displayName": "Oh My Pi",
   "description": "Chat with the omp coding agent inside VS Code: streaming replies, tool cards, diffs, model picker and every omp setting.",
-  "version": "0.29.0",
+  "version": "0.30.0",
   "publisher": "khanhd1nh",
   "license": "MIT",
   "repository": {
@@ -230,6 +230,11 @@
           "type": "string",
           "default": "omp",
           "description": "omp executable (name on PATH or absolute path). Installed automatically when missing."
+        },
+        "ohMyPi.compact": {
+          "type": "boolean",
+          "default": false,
+          "description": "Denser chat: tighter tool steps and smaller text, for small screens."
         },
         "ohMyPi.notifyOnDone": {
           "type": "boolean",

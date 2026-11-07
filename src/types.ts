@@ -88,6 +88,8 @@ export interface SessionStats {
   removed: number
   model?: string
   cacheWrite?: number
+  /** Your prompts in this session, joined and capped, for searching history by content. */
+  text?: string
   /** Model generation time (duration minus time-to-first-token), ms. */
   genMs?: number
 }

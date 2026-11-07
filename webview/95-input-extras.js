@@ -74,3 +74,19 @@ function chatMarkdown() {
   }
   return out.join('\n')
 }
+
+// Ctrl+Shift+J: background jobs panel · Ctrl+Shift+A: subagents menu · Alt+↑ / Alt+↓: previous / next prompt
+document.addEventListener('keydown', e => {
+  if (S.view !== 'chat') return
+  const mod = e.ctrlKey || e.metaKey
+  if (mod && e.shiftKey && e.key.toLowerCase() === 'j') { e.preventDefault(); jobView.open ? closeJobs() : openJob(null) }
+  else if (mod && e.shiftKey && e.key.toLowerCase() === 'a') { e.preventDefault(); openMenu('jobs') }
+  else if (e.altKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown') && transcriptEl) {
+    e.preventDefault()
+    const prompts = [...transcriptEl.querySelectorAll('.user-wrap')]
+    const top = transcriptEl.getBoundingClientRect().top
+    const at = prompts.map(n => n.getBoundingClientRect().top - top)
+    const next = e.key === 'ArrowUp' ? prompts[at.findLastIndex(y => y < -4)] : prompts[at.findIndex(y => y > 4)]
+    next?.scrollIntoView({ block: 'start', behavior: 'smooth' })
+  }
+})

@@ -34,9 +34,10 @@ function md(src) {
   for (let i = 0; i < L.length; i++) {
     const l = L[i]
     if (/^```/.test(l)) {
-      const lang = l.slice(3).trim().split(/\s/)[0]
+      const info = l.slice(3).trim().split(/\s+/), file = info.find(x => /[\\/.]/u.test(x) && !/^\.?\w+$/u.test(x)) ?? (info[0]?.includes('.') && info[0].includes('/') ? info[0] : undefined)
+      const lang = (info[0] && info[0] !== file ? info[0] : file?.split('.').pop()) ?? ''
       const b = []; i++; while (i < L.length && !/^```/.test(L[i])) b.push(L[i++])
-      out.push(`<div class="codeblock${lang ? ' has-lang' : ''}">${lang ? `<div class="code-head"><span class="lang">${esc(lang)}</span></div>` : ''}<button class="copy" title="Copy">Copy</button><pre><code>${esc(b.join('\n'))}</code></pre></div>`)
+      out.push(`<div class="codeblock${lang || file ? ' has-lang' : ''}">${lang || file ? `<div class="code-head"><span class="lang">${esc(lang)}</span>${file ? `<a class="file code-file" data-path="${esc(file)}">${esc(file)}</a>` : ''}</div>` : ''}<button class="copy" title="Copy">Copy</button><pre><code>${esc(b.join('\n'))}</code></pre></div>`)
       continue
     }
     const hd = /^(#{1,4})\s+(.*)/.exec(l); if (hd) { out.push(`<h${hd[1].length + 2}>${inline(hd[2])}</h${hd[1].length + 2}>`); continue }
@@ -46,7 +47,7 @@ function md(src) {
       const rows = []; while (i < L.length && /^\|.*\|\s*$/.test(L[i])) rows.push(L[i++]); i--
       const cells = r => r.trim().slice(1, -1).split('|').map(c => c.trim())
       const body = rows.filter(r => !/^\|[\s:|-]+\|\s*$/.test(r))
-      out.push(`<table>${body.map((r, n) => `<tr>${cells(r).map(c => n === 0 ? `<th>${inline(c)}</th>` : `<td>${inline(c)}</td>`).join('')}</tr>`).join('')}</table>`); continue
+      out.push(`<div class="table-wrap"><table>${body.map((r, n) => `<tr>${cells(r).map(c => n === 0 ? `<th>${inline(c)}</th>` : `<td>${inline(c)}</td>`).join('')}</tr>`).join('')}</table></div>`); continue
     }
     if (escapedBlob(l)) {
       const text = l.replace(/\\n/g, '\n').replace(/\\t/g, '  ').replace(/\\"/g, '"')

@@ -79,3 +79,9 @@ test('foldJobs reads job reports: completed output in a fence, failed output aft
   const r = foldJobs([JSON.stringify({ type: 'message', message: { role: 'toolResult', content: [{ type: 'text', text: report }] } })])
   assert.deepEqual(r.map(j => [j.jobId, j.status, j.output]), [['bg_22', 'completed', '> tsc --noEmit'], ['bg_21', 'failed', 'src/auth.ts(54,19): error TS2339']])
 })
+
+test('foldSession keeps your prompts for history search', () => {
+  const line = (text: string) => JSON.stringify({ type: 'message', timestamp: '2026-11-07T00:00:00Z', message: { role: 'user', attribution: 'user', content: [{ type: 'text', text }] } })
+  const s = foldSession([line('sửa chấm công'), line('kiểm tra quyền')])
+  assert.ok(s.text?.includes('chấm công') && s.text.includes('kiểm tra quyền'))
+})

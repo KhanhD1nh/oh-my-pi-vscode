@@ -18,6 +18,12 @@ const h = (tag, props = {}, ...kids) => {
 }
 const svg = d => { const s = document.createElementNS('http://www.w3.org/2000/svg', 'svg'); s.setAttribute('viewBox', '0 0 16 16'); s.setAttribute('fill', 'none'); s.setAttribute('stroke', 'currentColor'); s.setAttribute('stroke-width', '1.5'); s.setAttribute('stroke-linecap', 'round'); s.setAttribute('stroke-linejoin', 'round'); s.innerHTML = d; return s }
 const ICON = {
+  clock: '<circle cx="8" cy="8" r="5.8"/><path d="M8 4.8V8l2.2 1.4"/>',
+  folder: '<path d="M2 4.5A1.5 1.5 0 0 1 3.5 3h2.6l1.5 1.6h4.9A1.5 1.5 0 0 1 14 6.1v5.4a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 2 11.5z"/>',
+  branch: '<circle cx="4.5" cy="3.5" r="1.5"/><circle cx="4.5" cy="12.5" r="1.5"/><circle cx="11.5" cy="5.5" r="1.5"/><path d="M4.5 5v6M11.5 7c0 2.5-3 2.5-7 4"/>',
+  down: '<path d="M8 3v10M4 9l4 4 4-4"/>', upArrow: '<path d="M8 13V3M4 7l4-4 4 4"/>',
+  db: '<ellipse cx="8" cy="4" rx="5" ry="2"/><path d="M3 4v8c0 1.1 2.2 2 5 2s5-.9 5-2V4M3 8c0 1.1 2.2 2 5 2s5-.9 5-2"/>',
+  bolt: '<path d="M9 1.8L3.5 9h4l-1 5.2L12.5 7h-4z"/>',
   plus: '<path d="M8 3v10M3 8h10"/>', history: '<path d="M2.5 8a5.5 5.5 0 1 0 1.6-3.9"/><path d="M2.5 2.5v2.6h2.6M8 5v3l2 1.5"/>',
   gear: '<circle cx="8" cy="8" r="2"/><path d="M8 1.8v1.6M8 12.6v1.6M3.6 3.6l1.1 1.1M11.3 11.3l1.1 1.1M1.8 8h1.6M12.6 8h1.6M3.6 12.4l1.1-1.1M11.3 4.7l1.1-1.1"/>',
   up: '<path d="M8 13V3M4 7l4-4 4 4"/>', stop: '<rect x="4" y="4" width="8" height="8" rx="1.5" fill="currentColor" stroke="none"/>',
@@ -64,9 +70,10 @@ function md(src) {
   for (let i = 0; i < L.length; i++) {
     const l = L[i]
     if (/^```/.test(l)) {
-      const lang = l.slice(3).trim().split(/\s/)[0]
+      const info = l.slice(3).trim().split(/\s+/), file = info.find(x => /[\\/.]/u.test(x) && !/^\.?\w+$/u.test(x)) ?? (info[0]?.includes('.') && info[0].includes('/') ? info[0] : undefined)
+      const lang = (info[0] && info[0] !== file ? info[0] : file?.split('.').pop()) ?? ''
       const b = []; i++; while (i < L.length && !/^```/.test(L[i])) b.push(L[i++])
-      out.push(`<div class="codeblock${lang ? ' has-lang' : ''}">${lang ? `<div class="code-head"><span class="lang">${esc(lang)}</span></div>` : ''}<button class="copy" title="Copy">Copy</button><pre><code>${esc(b.join('\n'))}</code></pre></div>`)
+      out.push(`<div class="codeblock${lang || file ? ' has-lang' : ''}">${lang || file ? `<div class="code-head"><span class="lang">${esc(lang)}</span>${file ? `<a class="file code-file" data-path="${esc(file)}">${esc(file)}</a>` : ''}</div>` : ''}<button class="copy" title="Copy">Copy</button><pre><code>${esc(b.join('\n'))}</code></pre></div>`)
       continue
     }
     const hd = /^(#{1,4})\s+(.*)/.exec(l); if (hd) { out.push(`<h${hd[1].length + 2}>${inline(hd[2])}</h${hd[1].length + 2}>`); continue }
@@ -76,7 +83,7 @@ function md(src) {
       const rows = []; while (i < L.length && /^\|.*\|\s*$/.test(L[i])) rows.push(L[i++]); i--
       const cells = r => r.trim().slice(1, -1).split('|').map(c => c.trim())
       const body = rows.filter(r => !/^\|[\s:|-]+\|\s*$/.test(r))
-      out.push(`<table>${body.map((r, n) => `<tr>${cells(r).map(c => n === 0 ? `<th>${inline(c)}</th>` : `<td>${inline(c)}</td>`).join('')}</tr>`).join('')}</table>`); continue
+      out.push(`<div class="table-wrap"><table>${body.map((r, n) => `<tr>${cells(r).map(c => n === 0 ? `<th>${inline(c)}</th>` : `<td>${inline(c)}</td>`).join('')}</tr>`).join('')}</table></div>`); continue
     }
     if (escapedBlob(l)) {
       const text = l.replace(/\\n/g, '\n').replace(/\\t/g, '  ').replace(/\\"/g, '"')
@@ -108,19 +115,55 @@ function toolTarget(c) {
   try { const i = JSON.parse(c.input ?? '{}'); return { text: i.command ?? i.pattern ?? i.query ?? i.url ?? c.title } } catch { return { text: c.title } }
 }
 function diffStat(d) {
-  const a = d.oldText ? d.oldText.split('\n') : [], b = d.newText.split('\n')
+  if (d._stat) return d._stat
+  const ops = lineOps(d.oldText ? d.oldText.split('\n') : [], d.newText.split('\n'))
+  return (d._stat = { add: ops.filter(o => o[0] === '+').length, del: ops.filter(o => o[0] === '-').length })
+}
+/** Line ops between a and b: [' ', line] | ['-', line] | ['+', line]. LCS on the changed middle only. */
+function lineOps(a, b) {
   let s = 0; while (s < a.length && s < b.length && a[s] === b[s]) s++
-  let ea = a.length - 1, eb = b.length - 1; while (ea >= s && eb >= s && a[ea] === b[eb]) { ea--; eb-- }
-  return { s, ea, eb, a, b, add: Math.max(0, eb - s + 1), del: Math.max(0, ea - s + 1) }
+  let ea = a.length, eb = b.length; while (ea > s && eb > s && a[ea - 1] === b[eb - 1]) { ea--; eb-- }
+  const A = a.slice(s, ea), B = b.slice(s, eb), ops = a.slice(0, s).map(l => [' ', l])
+  // ponytail: O(n·m) table, capped; past the cap the middle shows as all removed then all added ("Open diff" is exact).
+  if (A.length * B.length > 250000) { for (const l of A) ops.push(['-', l]); for (const l of B) ops.push(['+', l]) }
+  else {
+    const T = Array.from({ length: A.length + 1 }, () => new Uint16Array(B.length + 1))
+    for (let i = A.length - 1; i >= 0; i--) for (let j = B.length - 1; j >= 0; j--) T[i][j] = A[i] === B[j] ? T[i + 1][j + 1] + 1 : Math.max(T[i + 1][j], T[i][j + 1])
+    let i = 0, j = 0
+    while (i < A.length || j < B.length) {
+      if (i < A.length && j < B.length && A[i] === B[j]) { ops.push([' ', A[i]]); i++; j++ }
+      else if (i < A.length && (j === B.length || T[i + 1][j] >= T[i][j + 1])) ops.push(['-', A[i++]])
+      else ops.push(['+', B[j++]])
+    }
+  }
+  for (const l of a.slice(ea)) ops.push([' ', l])
+  return ops
+}
+/** Words that changed between one removed and one added line, wrapped in <mark>. */
+function wordMarks(x, y) {
+  const tx = x.split(/(\s+|[^\w\s])/u).filter(Boolean), ty = y.split(/(\s+|[^\w\s])/u).filter(Boolean)
+  let s = 0; while (s < tx.length && s < ty.length && tx[s] === ty[s]) s++
+  let ex = tx.length, ey = ty.length; while (ex > s && ey > s && tx[ex - 1] === ty[ey - 1]) { ex--; ey-- }
+  const part = (t, e) => [t.slice(0, s).join(''), h('mark', {}, t.slice(s, e).join('')), t.slice(e).join('')]
+  return [part(tx, ex), part(ty, ey)]
 }
 function diffEl(d) {
-  const { s, ea, eb, a, b } = diffStat(d)
-  // ponytail: prefix/suffix trim, not a full LCS diff; the "Open diff" action shows the exact one.
-  const rows = []
-  for (let i = Math.max(0, s - 2); i < s; i++) rows.push(h('div', { class: 'd ctx' }, '  ' + a[i]))
-  for (let i = s; i <= ea; i++) rows.push(h('div', { class: 'd del' }, '- ' + a[i]))
-  for (let i = s; i <= eb; i++) rows.push(h('div', { class: 'd add' }, '+ ' + b[i]))
-  for (let i = eb + 1; i < Math.min(b.length, eb + 3); i++) rows.push(h('div', { class: 'd ctx' }, '  ' + b[i]))
+  const ops = lineOps(d.oldText ? d.oldText.split('\n') : [], d.newText.split('\n'))
+  // keep changed lines and 2 lines of context around them; gaps become "⋯"
+  const keep = ops.map(() => false)
+  ops.forEach(([k], i) => { if (k !== ' ') for (let j = Math.max(0, i - 2); j <= Math.min(ops.length - 1, i + 2); j++) keep[j] = true })
+  const rows = []; let gap = false
+  for (let i = 0; i < ops.length; i++) {
+    if (!keep[i]) { if (!gap && rows.length) rows.push(h('div', { class: 'd gap' }, '⋯')); gap = true; continue }
+    gap = false
+    const [k, l] = ops[i]
+    // a single removed line followed by a single added line: mark the words that changed
+    if (k === '-' && ops[i + 1]?.[0] === '+' && ops[i + 2]?.[0] !== '+' && ops[i - 1]?.[0] !== '-') {
+      const [mx, my] = wordMarks(l, ops[i + 1][1])
+      rows.push(h('div', { class: 'd del' }, h('span', { class: 'd-k' }, '-'), mx), h('div', { class: 'd add' }, h('span', { class: 'd-k' }, '+'), my)); i++; continue
+    }
+    rows.push(h('div', { class: `d ${k === '+' ? 'add' : k === '-' ? 'del' : 'same'}` }, h('span', { class: 'd-k' }, k === ' ' ? '' : k), l))
+  }
   return h('div', { class: 'diff' }, rows)
 }
 /** Claude Code–style step: bullet on a timeline, verb + target, then an IN/OUT box (bash) or inline diff (edit). */
@@ -365,6 +408,7 @@ function keepScrolledParts(old, fresh) {
 function upsertNode(it) {
   if (!transcriptEl) return
   transcriptEl.querySelector('.empty')?.remove()
+  if (nodes.has(it.id) && nodes.get(it.id) === null) return // inside a collapsed group
   const old = nodes.get(it.id)
   // Streaming text: swap only the message body's HTML instead of rebuilding the step (keeps the node, its
   // classes and listeners; the browser re-lays out one block, not the whole step).
@@ -442,6 +486,57 @@ function syncLatest() {
   if (!away) b.classList.remove('new')
 }
 
+// ───────────── grouped tool runs ─────────────
+const GROUP_MIN = 4
+const groupable = it => it.type === 'tool' && (it.card.status === 'completed' || it.card.status === 'failed') && !it.card.todo && !taskInfo(it.card) && !bgInfo(it.card) && !it.card.needsInput
+/** Runs of finished tool steps in `list` (indexes), excluding the tail of the current turn while it runs. */
+function toolRuns(list) {
+  const runs = []; let start = -1
+  const close = end => { if (start >= 0 && end - start >= GROUP_MIN) runs.push([start, end]); start = -1 }
+  list.forEach((it, i) => { if (groupable(it)) { if (start < 0) start = i } else close(i) })
+  // while busy, the newest run stays expanded: you are watching it happen
+  if (start >= 0 && !tab().busy) close(list.length); else start = -1
+  return runs
+}
+function groupSummary(its) {
+  const by = new Map(); for (const it of its) { const v = verbOf(it.card); by.set(v, (by.get(v) ?? 0) + 1) }
+  const t0 = Math.min(...its.map(x => x.card.startedAt ?? Infinity)), t1 = Math.max(...its.map(x => x.card.endedAt ?? 0))
+  return { parts: [...by].sort((a, b) => b[1] - a[1]).map(([v, n]) => `${n} ${v}`), ms: isFinite(t0) && t1 > t0 ? t1 - t0 : 0 }
+}
+function groupNode(its) {
+  const key = 'g:' + its[0].id
+  const open = S.open.has(key)
+  const { parts, ms } = groupSummary(its)
+  const el = h('div', { class: `step completed tool-group${open ? ' open' : ''}`, 'data-group': key },
+    h('div', { class: 'tool-line group-line', role: 'button', tabindex: '0', 'aria-expanded': open ? 'true' : 'false', onclick: () => toggleGroup(key), onkeydown: e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleGroup(key) } } },
+      h('span', { class: 'chev' + (open ? ' open' : '') }, '›'),
+      h('span', { class: 'tool-verb' }, `${its.length} steps`),
+      h('span', { class: 'tool-target' }, parts.slice(0, 4).join(' · ') + (parts.length > 4 ? ' …' : '')),
+      its.some(x => x.card.status === 'failed') ? h('span', { class: 'group-failed' }, `${its.filter(x => x.card.status === 'failed').length} failed`) : null,
+      ms >= 1000 ? h('span', { class: 'tool-time' }, took(ms)) : null))
+  return el
+}
+function toggleGroup(key) { S.open.has(key) ? S.open.delete(key) : S.open.add(key); const t = transcriptEl, top = t?.scrollTop; render(); if (t && transcriptEl) transcriptEl.scrollTop = top }
+
+/** "23 tools · 4 files (+120 −30) · 3m 12s" under a prompt once its turn is over. */
+function turnSummary(list, i) {
+  let j = i + 1; while (j < list.length && list[j].type !== 'user') j++
+  if (j === list.length && tab().busy) return null
+  const turn = list.slice(i + 1, j)
+  const tools = turn.filter(x => x.type === 'tool')
+  if (tools.length < 2) return null
+  const files = new Map()
+  for (const x of tools) if (x.card.diff) { const s = diffStat(x.card.diff), f = files.get(x.card.diff.path) ?? { add: 0, del: 0 }; f.add += s.add; f.del += s.del; files.set(x.card.diff.path, f) }
+  const add = [...files.values()].reduce((n, f) => n + f.add, 0), del = [...files.values()].reduce((n, f) => n + f.del, 0)
+  const failed = tools.filter(x => x.card.status === 'failed').length
+  const start = list[i].at, end = Math.max(0, ...turn.map(x => x.end ?? x.card?.endedAt ?? x.at ?? 0))
+  return h('div', { class: 'turn-sum', title: [...files.keys()].join('\n') },
+    h('span', {}, `${tools.length} tools`),
+    files.size ? h('span', {}, `${files.size} file${files.size > 1 ? 's' : ''} `, h('span', { class: 'plus' }, `+${add}`), ' ', h('span', { class: 'minus' }, `−${del}`)) : null,
+    failed ? h('span', { class: 'minus' }, `${failed} failed`) : null,
+    start && end > start ? h('span', {}, took(end - start)) : null)
+}
+
 // Chat view, composer, menus (model, mode, add, slash, files), history / sidebar.
 // ───────────── views ─────────────
 const app = document.getElementById('app')
@@ -483,7 +578,20 @@ function chatView() {
     const from = Math.max(0, list.length - (S.window[S.active] ?? 200))
     if (from > 0) transcriptEl.append(h('button', { class: 'earlier', onclick: () => { S.window[S.active] = (S.window[S.active] ?? 200) + 200; const t = transcriptEl, h0 = t.scrollHeight; render(); transcriptEl.scrollTop = transcriptEl.scrollHeight - h0 } }, `Show ${Math.min(200, from)} earlier of ${from}`))
     const frag = document.createDocumentFragment()
-    for (const it of list.slice(from)) { const n = itemNode(it); nodes.set(it.id, n); frag.append(n) }
+    const shown = list.slice(from)
+    const runs = new Map(toolRuns(shown).map(([a, b]) => [a, b]))
+    for (let i = 0; i < shown.length; i++) {
+      const end = runs.get(i)
+      if (end !== undefined) {
+        const its = shown.slice(i, end), key = 'g:' + its[0].id
+        frag.append(groupNode(its))
+        if (S.open.has(key)) for (const it of its) { const n = itemNode(it); n.classList.add('in-group'); nodes.set(it.id, n); frag.append(n) }
+        else for (const it of its) nodes.set(it.id, null)
+        i = end - 1; continue
+      }
+      const it = shown[i]; const n = itemNode(it); nodes.set(it.id, n); frag.append(n)
+      if (it.type === 'user') { const s = turnSummary(shown, i); if (s) frag.append(s) }
+    }
     transcriptEl.append(frag)
   }
   renderWorking()
@@ -768,7 +876,7 @@ function historyView() {
     kv('Tokens in / out', `${fmtTok(sum.inp)} / ${fmtTok(sum.out)}`),
     kv('Prompts', String(sum.prompts)),
     h('div', { class: 'kv-row col' }, h('span', {}, 'Code changes'), h('span', { class: 'v' }, h('span', { class: 'plus' }, `${sum.add.toLocaleString()} added`), ', ', h('span', { class: 'minus' }, `${sum.del.toLocaleString()} removed`)))))
-  const rows = all.filter(s => !q || cleanTitle(s.title).toLowerCase().includes(q) || (s.stats?.model ?? '').toLowerCase().includes(q))
+  const rows = all.filter(s => !q || cleanTitle(s.title).toLowerCase().includes(q) || (s.stats?.model ?? '').toLowerCase().includes(q) || (s.stats?.text ?? '').toLowerCase().includes(q))
   const active = rows.filter(s => open.has(s.sessionId))
   const empty = rows.filter(s => !open.has(s.sessionId) && s.stats && !s.stats.prompts)
   const rest = rows.filter(s => !open.has(s.sessionId) && !empty.includes(s))
@@ -782,7 +890,7 @@ function historyView() {
         h('span', { class: 'session-title' }, cleanTitle(s.title)), h('span', { class: 'when' }, s.updatedAt ? ago(s.updatedAt) : '')),
       meta || x?.added || x?.removed ? h('div', { class: 'session-meta' }, meta, x && (x.added || x.removed) ? h('span', { class: 'diffstat' }, h('span', { class: 'plus' }, `+${x.added}`), ' ', h('span', { class: 'minus' }, `-${x.removed}`)) : null) : null)
   }
-  const search = h('input', { type: 'search', class: 'search', placeholder: 'Search sessions…', value: S.sessionQuery, oninput: e => { S.sessionQuery = e.target.value; const p = e.target.selectionStart; render(); const f = document.querySelector('.search'); f.focus(); f.setSelectionRange(p, p) } })
+  const search = h('input', { type: 'search', class: 'search', placeholder: 'Search titles and prompts…', value: S.sessionQuery, oninput: e => { S.sessionQuery = e.target.value; const p = e.target.selectionStart; render(); const f = document.querySelector('.search'); f.focus(); f.setSelectionRange(p, p) } })
   const sessions = collapsible('sessions', 'Sessions', h('span', { class: 'count' }, String(all.length)), h('div', { class: 'sb-body' },
     h('button', { class: 'sb-new', onclick: () => send({ type: 'newTab' }) }, svg(ICON.plus), 'New session'),
     search,
@@ -955,6 +1063,7 @@ window.addEventListener('message', ({ data: m }) => {
       if (i < 0) return
       const was = S.tabs[i]
       S.tabs[i] = m.tab
+      if (!m.tab.busy && was.busy && m.tab.id === S.active && S.view === 'chat') { const t = transcriptEl, atEnd = t && t.scrollHeight - t.scrollTop - t.clientHeight < 80; render(); if (atEnd && transcriptEl) transcriptEl.scrollTop = transcriptEl.scrollHeight }
       if (!m.tab.busy && was.busy && m.tab.id === S.active) { refreshJobs(); if (S.menu === 'jobs') S.menu = null }
       if (m.tab.busy && !was.busy) { const st = (STAT[m.tab.id] ??= { chars: 0, total: 0, t0: 0, last: 0 }); st.chars = 0; st.t0 = 0 }
       if (m.tab.id === S.active) { refreshStatus(); refreshGoal() }
@@ -1162,21 +1271,21 @@ const fmtTok = n => n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : n >= 1e3 ? `${(n / 1
 const fmtDur = ms => { const m = Math.floor(ms / 60000); return m >= 60 ? `${Math.floor(m / 60)}h${m % 60 ? ` ${m % 60}m` : ''}` : m ? `${m}m` : `${Math.floor(ms / 1000)}s` }
 function statusLine() {
   const t = tab(); const s = STAT[S.active] ?? { chars: 0, total: 0, t0: 0, last: 0 }
-  const seg = (cls, icon, text, title) => text ? h('span', { class: `seg ${cls}`, title }, icon ? h('span', { class: 'seg-i' }, icon) : null, text) : null
+  const seg = (cls, icon, text, title) => text ? h('span', { class: `seg ${cls}`, title }, icon ? h('span', { class: 'seg-i' }, ICON[icon] ? svg(ICON[icon]) : icon) : null, text) : null
   const u = t.usage ?? {}
   const pct = u.size ? (u.used ?? 0) / u.size * 100 : null
   const secs = s.t0 && s.last > s.t0 ? (s.last - s.t0) / 1000 : 0
   const rate = t.busy && secs > 1 ? (s.chars / 4 / secs).toFixed(1) : null
   return h('div', { class: 'statusline', id: 'statusline' },
-    seg('time', '⏱', t.startedAt ? fmtDur(Date.now() - t.startedAt) : '', 'Tab open for'),
-    seg('path', '▣', t.folder ?? '', S.cwd),
-    seg('git', '⎇', t.branch ?? '', 'Git branch'),
+    seg('time', 'clock', t.startedAt ? fmtDur(Date.now() - t.startedAt) : '', 'Tab open for'),
+    seg('path', 'folder', t.folder ?? '', S.cwd),
+    seg('git', 'branch', t.branch ?? '', 'Git branch'),
     h('span', { class: 'grow' }),
     seg('ctx', '', pct === null ? '' : `${pct.toFixed(1)}% · ${fmtTok(u.used ?? 0)}/${fmtTok(u.size)}`, 'Context used (omp)'),
-    t.stats ? seg('tin', '↓', fmtTok(t.stats.input), 'Input tokens (omp session)') : null,
-    t.stats || s.total ? seg('out', '↑', t.stats && !t.busy ? fmtTok(t.stats.output) : fmtTok((t.stats?.output ?? 0) + Math.round(s.chars / 4)), 'Output tokens (omp session' + (t.busy ? ' + streaming estimate)' : ')')) : null,
-    t.stats?.cacheRead ? seg('cache', '⛁', fmtTok(t.stats.cacheRead), `Cache read${t.stats.input + t.stats.cacheRead ? ` · ${(t.stats.cacheRead / (t.stats.input + t.stats.cacheRead) * 100).toFixed(0)}% hit` : ''}`) : null,
-    seg('rate', '⚡', rate ? `${rate} tok/s` : t.stats?.apiMs ? `${(t.stats.output / (t.stats.apiMs / 1000)).toFixed(1)} tok/s` : '', rate ? 'Output speed now (estimated)' : 'Average model speed (omp session)'),
+    t.stats ? seg('tin', 'down', fmtTok(t.stats.input), 'Input tokens (omp session)') : null,
+    t.stats || s.total ? seg('out', 'upArrow', t.stats && !t.busy ? fmtTok(t.stats.output) : fmtTok((t.stats?.output ?? 0) + Math.round(s.chars / 4)), 'Output tokens (omp session' + (t.busy ? ' + streaming estimate)' : ')')) : null,
+    t.stats?.cacheRead ? seg('cache', 'db', fmtTok(t.stats.cacheRead), `Cache read${t.stats.input + t.stats.cacheRead ? ` · ${(t.stats.cacheRead / (t.stats.input + t.stats.cacheRead) * 100).toFixed(0)}% hit` : ''}`) : null,
+    seg('rate', 'bolt', rate ? `${rate} tok/s` : t.stats?.apiMs ? `${(t.stats.output / (t.stats.apiMs / 1000)).toFixed(1)} tok/s` : '', rate ? 'Output speed now (estimated)' : 'Average model speed (omp session)'),
     seg('cost', '', (u.cost ?? t.stats?.cost) ? '$' + (u.cost ?? t.stats.cost).toFixed((u.cost ?? t.stats.cost) < 1 ? 3 : 2) : '', 'Session cost (omp)'))
 }
 /** Rebuild the status line only when what it shows changed (it is asked every second). */
@@ -1206,10 +1315,12 @@ function bgChip() {
   const { agents, jobs: cards } = activity()
   const jobs = bgJobs().length ? bgJobs() : cards.map(c => ({ status: 'running' }))
   if (!agents.length && !jobs.length) return null
-  const live = agents.filter(a => a.running).length
-  const label = [agents.length ? (live ? `${live}/${agents.length} agents` : `${agents.length} agent${agents.length > 1 ? 's' : ''}`) : '', jobs.length ? `${jobs.filter(j => j.status === 'running').length ? jobs.filter(j => j.status === 'running').length + '/' : ''}${jobs.length} bg` : ''].filter(Boolean).join(' · ')
+  // "2 running" first and bold; totals after it, dimmed — the totals are history, not what runs now
+  const live = agents.filter(a => a.running).length + jobs.filter(j => j.status === 'running').length
+  const totals = [agents.length ? `${agents.length} agent${agents.length > 1 ? 's' : ''}` : '', jobs.length ? `${jobs.length} bg` : ''].filter(Boolean).join(' · ')
+  const label = live ? [h('b', { class: 'chip-live' }, `${live} running`), h('span', { class: 'chip-total' }, ` · ${totals}`)] : [h('span', { class: 'chip-total' }, `${totals} · done`)]
   const failed = jobs.filter(j => j.status === 'failed').length + agents.filter(a => a.failed).length
-  return h('button', { class: `chip-btn jobs${S.menu === 'jobs' ? ' open' : ''}${failed ? ' has-failed' : ''}`, title: 'Subagents and background jobs', onclick: () => openMenu('jobs') }, agents.some(a => a.running) || jobs.some(j => j.status === 'running') ? runDot() : (agents.length || jobs.length) ? h('span', { class: 'agent-done-dot', 'aria-hidden': 'true' }) : h('span', { class: 'live busy' }), h('span', { class: 'label' }, label), failed ? h('span', { class: 'chip-failed', title: `${failed} failed` }, `${failed} ✕`) : null)
+  return h('button', { class: `chip-btn jobs${S.menu === 'jobs' ? ' open' : ''}${failed ? ' has-failed' : ''}${live ? '' : ' idle'}`, title: live ? `${live} running now · ${totals} in this chat` : `Nothing running · ${totals} in this chat`, onclick: () => openMenu('jobs') }, agents.some(a => a.running) || jobs.some(j => j.status === 'running') ? runDot() : (agents.length || jobs.length) ? h('span', { class: 'agent-state done', 'aria-hidden': 'true' }, '✓') : h('span', { class: 'live busy' }), h('span', { class: 'label' }, label), failed ? h('span', { class: 'chip-failed', title: `${failed} failed` }, `${failed} ✕`) : null)
 }
 let jobTick = 0
 EVERY_SECOND.push(() => { if (S.view === 'chat' && tab()?.busy && ++jobTick % 5 === 0) refreshJobs() })
@@ -1498,6 +1609,22 @@ function chatMarkdown() {
   }
   return out.join('\n')
 }
+
+// Ctrl+Shift+J: background jobs panel · Ctrl+Shift+A: subagents menu · Alt+↑ / Alt+↓: previous / next prompt
+document.addEventListener('keydown', e => {
+  if (S.view !== 'chat') return
+  const mod = e.ctrlKey || e.metaKey
+  if (mod && e.shiftKey && e.key.toLowerCase() === 'j') { e.preventDefault(); jobView.open ? closeJobs() : openJob(null) }
+  else if (mod && e.shiftKey && e.key.toLowerCase() === 'a') { e.preventDefault(); openMenu('jobs') }
+  else if (e.altKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown') && transcriptEl) {
+    e.preventDefault()
+    const prompts = [...transcriptEl.querySelectorAll('.user-wrap')]
+    const top = transcriptEl.getBoundingClientRect().top
+    const at = prompts.map(n => n.getBoundingClientRect().top - top)
+    const next = e.key === 'ArrowUp' ? prompts[at.findLastIndex(y => y < -4)] : prompts[at.findIndex(y => y > 4)]
+    next?.scrollIntoView({ block: 'start', behavior: 'smooth' })
+  }
+})
 
 // Boot: must run after every declaration above.
 // boot last: every const above must exist before the first render

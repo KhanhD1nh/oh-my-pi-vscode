@@ -39,7 +39,20 @@ function chatView() {
     const from = Math.max(0, list.length - (S.window[S.active] ?? 200))
     if (from > 0) transcriptEl.append(h('button', { class: 'earlier', onclick: () => { S.window[S.active] = (S.window[S.active] ?? 200) + 200; const t = transcriptEl, h0 = t.scrollHeight; render(); transcriptEl.scrollTop = transcriptEl.scrollHeight - h0 } }, `Show ${Math.min(200, from)} earlier of ${from}`))
     const frag = document.createDocumentFragment()
-    for (const it of list.slice(from)) { const n = itemNode(it); nodes.set(it.id, n); frag.append(n) }
+    const shown = list.slice(from)
+    const runs = new Map(toolRuns(shown).map(([a, b]) => [a, b]))
+    for (let i = 0; i < shown.length; i++) {
+      const end = runs.get(i)
+      if (end !== undefined) {
+        const its = shown.slice(i, end), key = 'g:' + its[0].id
+        frag.append(groupNode(its))
+        if (S.open.has(key)) for (const it of its) { const n = itemNode(it); n.classList.add('in-group'); nodes.set(it.id, n); frag.append(n) }
+        else for (const it of its) nodes.set(it.id, null)
+        i = end - 1; continue
+      }
+      const it = shown[i]; const n = itemNode(it); nodes.set(it.id, n); frag.append(n)
+      if (it.type === 'user') { const s = turnSummary(shown, i); if (s) frag.append(s) }
+    }
     transcriptEl.append(frag)
   }
   renderWorking()
@@ -324,7 +337,7 @@ function historyView() {
     kv('Tokens in / out', `${fmtTok(sum.inp)} / ${fmtTok(sum.out)}`),
     kv('Prompts', String(sum.prompts)),
     h('div', { class: 'kv-row col' }, h('span', {}, 'Code changes'), h('span', { class: 'v' }, h('span', { class: 'plus' }, `${sum.add.toLocaleString()} added`), ', ', h('span', { class: 'minus' }, `${sum.del.toLocaleString()} removed`)))))
-  const rows = all.filter(s => !q || cleanTitle(s.title).toLowerCase().includes(q) || (s.stats?.model ?? '').toLowerCase().includes(q))
+  const rows = all.filter(s => !q || cleanTitle(s.title).toLowerCase().includes(q) || (s.stats?.model ?? '').toLowerCase().includes(q) || (s.stats?.text ?? '').toLowerCase().includes(q))
   const active = rows.filter(s => open.has(s.sessionId))
   const empty = rows.filter(s => !open.has(s.sessionId) && s.stats && !s.stats.prompts)
   const rest = rows.filter(s => !open.has(s.sessionId) && !empty.includes(s))
@@ -338,7 +351,7 @@ function historyView() {
         h('span', { class: 'session-title' }, cleanTitle(s.title)), h('span', { class: 'when' }, s.updatedAt ? ago(s.updatedAt) : '')),
       meta || x?.added || x?.removed ? h('div', { class: 'session-meta' }, meta, x && (x.added || x.removed) ? h('span', { class: 'diffstat' }, h('span', { class: 'plus' }, `+${x.added}`), ' ', h('span', { class: 'minus' }, `-${x.removed}`)) : null) : null)
   }
-  const search = h('input', { type: 'search', class: 'search', placeholder: 'Search sessions…', value: S.sessionQuery, oninput: e => { S.sessionQuery = e.target.value; const p = e.target.selectionStart; render(); const f = document.querySelector('.search'); f.focus(); f.setSelectionRange(p, p) } })
+  const search = h('input', { type: 'search', class: 'search', placeholder: 'Search titles and prompts…', value: S.sessionQuery, oninput: e => { S.sessionQuery = e.target.value; const p = e.target.selectionStart; render(); const f = document.querySelector('.search'); f.focus(); f.setSelectionRange(p, p) } })
   const sessions = collapsible('sessions', 'Sessions', h('span', { class: 'count' }, String(all.length)), h('div', { class: 'sb-body' },
     h('button', { class: 'sb-new', onclick: () => send({ type: 'newTab' }) }, svg(ICON.plus), 'New session'),
     search,

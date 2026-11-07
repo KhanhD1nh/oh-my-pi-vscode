@@ -1,7 +1,7 @@
 /** Streaming chunks merge, tool calls update in place, diffs are captured. */
 import { strict as assert } from 'node:assert'
 import { test } from 'node:test'
-import { Transcript, toolDiff } from '../src/transcript.ts'
+import { Transcript, cleanOutput, toolDiff } from '../src/transcript.ts'
 
 test('merges streaming chunks and keeps kinds apart', () => {
   const t = new Transcript()
@@ -88,4 +88,12 @@ test('bash cards waiting for a passphrase are flagged; ordinary ones are not', (
   assert.equal(waiting?.type === 'tool' ? waiting.card.needsInput : null, 'SSH key passphrase')
   const ok = t.apply({ sessionUpdate: 'tool_call', toolCallId: 'g', name: 'bash', kind: 'execute', title: 'git', status: 'completed', rawInput: { command: 'git status' } })
   assert.equal(ok?.type === 'tool' ? ok.card.needsInput : 'x', undefined)
+})
+
+test('cleanOutput drops omp bookkeeping and the echoed command', () => {
+  const raw = '$ ssh -p 22 a@b "x"\nadmin@b: Permission denied (publickey).\n\n\nWall time: 2.69 seconds\nIgnored ready: service-only, and no service name was given.'
+  assert.equal(cleanOutput(raw, 'ssh -p 22 a@b "x"'), 'admin@b: Permission denied (publickey).')
+  const bg = 'Ignored ready: service-only, and no service name was given.\nBackgrounded early to handle an incoming message; the command keeps running.\n\nBackgrounded as job bg_1 (killed once it has run 30s in total); Do NOT poll for it.'
+  assert.equal(cleanOutput(bg), 'Backgrounded as job bg_1.')
+  assert.equal(cleanOutput('ok\n'), 'ok')
 })
