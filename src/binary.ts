@@ -100,5 +100,14 @@ export function ompEnv(base: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv
     if (k === 'ELECTRON_RUN_AS_NODE' || k === 'ELECTRON_NO_ATTACH_CONSOLE' || k.startsWith('VSCODE_')) continue
     env[k] = v
   }
+  // Windows: omp's shell resolves commands from this PATH, where Git's usr\bin\ssh.exe usually comes before
+  // Windows OpenSSH. Git's ssh cannot see the Windows ssh-agent service (where the chat's "Unlock key" puts the
+  // key), so put Windows OpenSSH first.
+  if (process.platform === 'win32') {
+    const dir = 'C:\\Windows\\System32\\OpenSSH'
+    const key = Object.keys(env).find(k => k.toUpperCase() === 'PATH') ?? 'Path'
+    const rest = (env[key] ?? '').split(';').filter(p => p && p.replace(/\\+$/u, '').toLowerCase() !== dir.toLowerCase())
+    env[key] = [dir, ...rest].join(';')
+  }
   return env
 }

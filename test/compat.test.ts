@@ -44,3 +44,10 @@ test('session format: fine, changed, or nothing to check', async () => {
   writeFileSync(join(dir, 'b.jsonl'), [JSON.stringify({ type: 'session', id: 'y' }), JSON.stringify({ type: 'message', message: { role: 'assistant', tokens: 3 } })].join('\n'))
   assert.match(await (await load()).checkSessionFormat(dir) ?? '', /no usage/u)
 })
+
+test('ompEnv puts Windows OpenSSH first on Windows', async () => {
+  const { ompEnv } = await import('../src/binary.ts')
+  const env = ompEnv({ Path: String.raw`C:\Program Files\Git\usr\bin;C:\Windows\System32\OpenSSH\;C:\x`, VSCODE_PID: '1' })
+  if (process.platform === 'win32') assert.equal(env.Path, String.raw`C:\Windows\System32\OpenSSH;C:\Program Files\Git\usr\bin;C:\x`)
+  assert.equal(env.VSCODE_PID, undefined)
+})
