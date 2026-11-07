@@ -137,7 +137,7 @@ function toolTime(c) {
   const running = c.status === 'pending' || c.status === 'in_progress'
   const ms = (c.endedAt ?? Date.now()) - c.startedAt
   if (!running && ms < 1000) return null
-  const el = h('span', { class: `tool-time${running ? ' live' : ''}`, title: `Started ${new Date(c.startedAt).toLocaleTimeString()}` }, running && ms < 1000 ? '' : took(ms))
+  const el = h('span', { class: `tool-time${running ? ' ticking' : ''}`, title: `Started ${new Date(c.startedAt).toLocaleTimeString()}` }, running && ms < 1000 ? '' : took(ms))
   if (running) el.dataset.since = String(c.startedAt)
   return el
 }
@@ -1146,7 +1146,7 @@ function bgChip() {
   return h('button', { class: `chip-btn jobs${S.menu === 'jobs' ? ' open' : ''}`, title: 'Subagents and background jobs', onclick: () => openMenu('jobs') }, agents.length ? runDot() : h('span', { class: 'live busy' }), h('span', { class: 'label' }, label))
 }
 // live timers on running tool lines and agent cards
-EVERY_SECOND.push(() => { for (const el of document.querySelectorAll('.tool-time.live[data-since]')) { const v = took(Date.now() - Number(el.dataset.since)); if (el.textContent !== v) el.textContent = v } })
+EVERY_SECOND.push(() => { for (const el of document.querySelectorAll('.tool-time.ticking[data-since]')) { const v = took(Date.now() - Number(el.dataset.since)); if (el.textContent !== v) el.textContent = v } })
 EVERY_SECOND.push(() => { for (const el of document.querySelectorAll('[data-t0]')) if (el.dataset.t0) { const v = since(Number(el.dataset.t0)); if (el.textContent !== v) el.textContent = v } })
 
 

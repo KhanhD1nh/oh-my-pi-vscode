@@ -46,7 +46,7 @@ function toolTime(c) {
   const running = c.status === 'pending' || c.status === 'in_progress'
   const ms = (c.endedAt ?? Date.now()) - c.startedAt
   if (!running && ms < 1000) return null
-  const el = h('span', { class: `tool-time${running ? ' live' : ''}`, title: `Started ${new Date(c.startedAt).toLocaleTimeString()}` }, running && ms < 1000 ? '' : took(ms))
+  const el = h('span', { class: `tool-time${running ? ' ticking' : ''}`, title: `Started ${new Date(c.startedAt).toLocaleTimeString()}` }, running && ms < 1000 ? '' : took(ms))
   if (running) el.dataset.since = String(c.startedAt)
   return el
 }
