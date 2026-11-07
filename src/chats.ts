@@ -343,7 +343,7 @@ export class ChatProvider implements vscode.WebviewViewProvider {
   private notifyDone(s: OmpSession): void {
     const t = this.tab(s.id)
     if (!t || (t.panel.active && vscode.window.state.focused)) return
-    if (!vscode.workspace.getConfiguration('ohMyPi').get<boolean>('notifyOnDone', true)) return
+    if (!vscode.workspace.getConfiguration('ohMyPi').get<boolean>('notifyOnDone', false)) return
     const last = [...s.transcript.items].reverse().find(i => i.type === 'assistant' || i.type === 'error')
     const summary = last && 'text' in last ? last.text.replace(/\s+/gu, ' ').slice(0, 90) : ''
     const name = (s.title ?? 'Chat').replace(/^\S*\s*/u, m => /\p{Extended_Pictographic}/u.test(m) ? '' : m)
