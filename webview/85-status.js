@@ -56,13 +56,15 @@ function activity() {
   return { agents, jobs }
 }
 function bgChip() {
-  const { agents } = activity()
-  const jobs = bgJobs().filter(j => j.type !== 'task')
+  const { agents, jobs: cards } = activity()
+  const jobs = bgJobs().length ? bgJobs() : cards.map(c => ({ status: 'running' }))
   if (!agents.length && !jobs.length) return null
   const live = agents.filter(a => a.running).length
   const label = [agents.length ? (live ? `${live}/${agents.length} agents` : `${agents.length} agent${agents.length > 1 ? 's' : ''}`) : '', jobs.length ? `${jobs.filter(j => j.status === 'running').length ? jobs.filter(j => j.status === 'running').length + '/' : ''}${jobs.length} bg` : ''].filter(Boolean).join(' · ')
   return h('button', { class: `chip-btn jobs${S.menu === 'jobs' ? ' open' : ''}`, title: 'Subagents and background jobs', onclick: () => openMenu('jobs') }, agents.some(a => a.running) || jobs.some(j => j.status === 'running') ? runDot() : (agents.length || jobs.length) ? h('span', { class: 'agent-done-dot', 'aria-hidden': 'true' }) : h('span', { class: 'live busy' }), h('span', { class: 'label' }, label))
 }
+let jobTick = 0
+EVERY_SECOND.push(() => { if (S.view === 'chat' && tab()?.busy && ++jobTick % 5 === 0) refreshJobs() })
 // live timers on running tool lines and agent cards
 EVERY_SECOND.push(() => { for (const el of document.querySelectorAll('.tool-time.ticking[data-since]')) { const v = took(Date.now() - Number(el.dataset.since)); if (el.textContent !== v) el.textContent = v } })
 EVERY_SECOND.push(() => { for (const el of document.querySelectorAll('[data-t0]')) if (el.dataset.t0) { const v = since(Number(el.dataset.t0)); if (el.textContent !== v) el.textContent = v } })

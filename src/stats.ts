@@ -237,10 +237,18 @@ export async function sessionJobs(cwd: string, sessionId: string): Promise<JobIn
   try { names = await fs.readdir(dir) } catch { return [] }
   const file = names.find(n => n.endsWith(`_${sessionId}.jsonl`))
   if (file === undefined) return []
-  let text: string
-  try { text = await fs.readFile(join(dir, file), 'utf8') } catch { return [] }
-  return foldJobs(text.split('\n'))
+  const path = join(dir, file)
+  try {
+    // polled every few seconds while a turn runs: fold again only when the file changed
+    const { size, mtimeMs } = await fs.stat(path)
+    const hit = jobCache.get(path)
+    if (hit && hit.size === size && hit.mtime === mtimeMs) return hit.jobs
+    const jobs = foldJobs((await fs.readFile(path, 'utf8')).split('\n'))
+    jobCache.set(path, { size, mtime: mtimeMs, jobs })
+    return jobs
+  } catch { return [] }
 }
+const jobCache = new Map<string, { size: number; mtime: number; jobs: JobInfo[] }>()
 
 /** Pure fold: "Backgrounded as job bg_N" tool results start a job, "background job delivery" notices end it. */
 export function foldJobs(lines: Iterable<string>, cap = 20_000): JobInfo[] {

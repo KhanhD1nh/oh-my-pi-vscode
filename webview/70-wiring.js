@@ -40,7 +40,7 @@ window.addEventListener('message', ({ data: m }) => {
       const changedActive = m.active !== S.active
       const structure = S.tabs.map(t => t.id).join() !== m.tabs.map(t => t.id).join()
       S.tabs = m.tabs; S.models = m.models; S.cwd = m.cwd
-      if (changedActive) { saveDraft(); S.active = m.active }
+      if (changedActive) { saveDraft(); S.active = m.active; refreshJobs() }
       if (S.view === 'chat') { if (changedActive || structure) render(); else refreshComposer() }
       else if (S.view === 'history') render()
       return
@@ -64,12 +64,14 @@ window.addEventListener('message', ({ data: m }) => {
       const same = JSON.stringify(S.transcripts[m.tab] ?? null) === JSON.stringify(m.items)
       S.transcripts[m.tab] = m.items
       if (!same && m.tab === S.active && S.view === 'chat') { S.open.clear(); render() }
+      if (m.tab === S.active) refreshJobs()
       return
     }
     case 'upsert': {
       const list = (S.transcripts[m.tab] ??= [])
       const i = list.findIndex(x => x.id === m.item.id)
       trackStream(m.tab, m.item, i >= 0 ? list[i].text?.length : 0)
+      if (m.item.card && bgInfo(m.item.card) && m.tab === S.active && (i < 0 || list[i].card?.status !== m.item.card.status)) refreshJobs()
       if (i >= 0) list[i] = m.item; else list.push(m.item)
       if (m.tab === S.active && S.view === 'chat') queueUpsert(m.item, () => { updateWorking(); if (m.item.card?.todo) refreshTodo() })
       return
