@@ -18,10 +18,10 @@ function todoBar() {
   const all = ph.flatMap(p => p.tasks), done = all.filter(t => t.status === 'completed').length
   if (!all.length || done === all.length) return null
   const cur = all.find(t => t.status === 'in_progress')
-  const open = !S.todoClosed
+  const open = !!S.todoOpen?.[S.active]
   return h('div', { class: 'todobar', id: 'todobar' },
-    h('button', { class: 'todobar-head', onclick: () => { S.todoClosed = open; refreshTodo() } }, h('span', { class: `chev${open ? ' open' : ''}` }, '›'),
-      h('span', { class: 'todobar-title' }, cur ? cur.content : 'Todo'), h('span', { class: 'muted' }, `${done}/${all.length}`),
+    h('button', { class: 'todobar-head', 'aria-expanded': open ? 'true' : 'false', onclick: () => { (S.todoOpen ??= {})[S.active] = !open; refreshTodo() } }, h('span', { class: `chev${open ? ' open' : ''}` }, '›'),
+      h('span', { class: 'todobar-ico', 'aria-hidden': 'true' }, cur ? '▸' : '○'), h('span', { class: 'todobar-title' }, cur ? cur.content : all.find(t => t.status === 'pending')?.content ?? 'Todo'), h('span', { class: 'todobar-count' }, `${done}/${all.length}`),
       h('span', { class: 'todo-meter' }, h('span', { style: `width:${(done / all.length * 100).toFixed(0)}%` }))),
     open ? todoList(ph, true) : null)
 }

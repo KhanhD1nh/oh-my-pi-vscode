@@ -85,7 +85,7 @@ window.addEventListener('message', ({ data: m }) => {
       if (firstLoad || m.status !== 'ready') render(); else renderSettingsList()
       return
     }
-    case 'jobs': { if (m.tab !== S.active) return; const same = JSON.stringify(JOBS[m.tab]) === JSON.stringify(m.jobs); JOBS[m.tab] = m.jobs; if (!same) { refreshComposer(); renderJobPanel() } return }
+    case 'jobs': { if (m.tab !== S.active) return; const same = JSON.stringify(JOBS[m.tab]) === JSON.stringify(m.jobs); JOBS[m.tab] = m.jobs; if (!same) { refreshComposer(); renderJobPanel(); if (S.view === 'chat') for (const it of items()) if (it.type === 'tool' && bgInfo(it.card) && nodes.has(it.id)) upsertNode(it) } return }
     case 'agentConversation': {
       const o = agentView.open
       if (!o || o.toolId !== m.toolId || o.name !== m.name) return

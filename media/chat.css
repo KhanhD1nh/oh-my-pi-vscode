@@ -778,3 +778,40 @@ body.vscode-light { --rail: color-mix(in srgb, var(--vscode-foreground) 14%, tra
 .jp-out .codeblock { flex: 1; min-height: 0; display: flex; margin: 0; }
 .jp-out .codeblock pre { flex: 1; overflow: auto; white-space: pre-wrap; word-break: break-word; font-size: 12px; }
 .job-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 260px; }
+
+/* ── display pass: bg card, wait, todo bar, jump-to-latest, chip failures ── */
+.job-id { flex: none; font-family: var(--mono); font-size: 11px; color: var(--muted); padding: 0 6px; border-radius: 6px; background: var(--soft); line-height: 18px; }
+.job-id.link { cursor: pointer; border: 0; }
+.job-id.link:hover { color: var(--vscode-foreground); background: color-mix(in srgb, var(--omp-purple) 22%, transparent); }
+.bg-cmd { font-family: var(--mono); font-size: 0.92em; background: none; padding: 0; }
+.tool.bg .bg-pill { display: inline-flex; align-items: center; gap: 5px; margin-left: 4px; line-height: 18px; text-transform: lowercase; }
+.tool.bg .bg-pill .run-dot, .tool.bg .bg-pill [class*="dot"] { width: 5px; height: 5px; }
+.tool.bg .tool-line > .tool-target { flex: 0 1 auto; }
+.tool.bg .tool-line > .job-id { margin-left: auto; }
+.tool.bg .tool-line > .tool-time { margin-left: 0; }
+.bg-open { flex: none; font-size: 11px; padding: 0 8px; line-height: 18px; border-radius: 6px; border: 1px solid var(--line); color: var(--muted); }
+.bg-open:hover { color: var(--vscode-foreground); border-color: var(--omp-purple); }
+.tool.bg.failed .tool-verb { color: var(--vscode-errorForeground); }
+.tool.wait .tool-verb { color: var(--muted); font-weight: 500; }
+.tool.wait .tool-target { color: var(--muted); }
+.tool.wait .tool-time { margin-left: auto; }
+.wait-dots { display: inline-flex; gap: 3px; flex: none; }
+.wait-dots i { width: 3px; height: 3px; border-radius: 50%; background: var(--muted); animation: waitdot 1.2s ease-in-out infinite; }
+.wait-dots i:nth-child(2) { animation-delay: .15s; } .wait-dots i:nth-child(3) { animation-delay: .3s; }
+@keyframes waitdot { 0%, 60%, 100% { opacity: .25; transform: none; } 30% { opacity: 1; transform: translateY(-2px); } }
+.todobar-head { gap: 8px; }
+.todobar-ico { color: var(--omp-purple); flex: none; width: 12px; text-align: center; }
+.todobar-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left; }
+.todobar-count { color: var(--muted); font-variant-numeric: tabular-nums; flex: none; font-size: 0.92em; }
+.composer-wrap { position: relative; }
+.to-latest { position: absolute; right: 18px; top: -42px; width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; z-index: 5;
+  background: var(--vscode-editorWidget-background, var(--vscode-input-background)); border: 1px solid var(--line); color: var(--vscode-foreground);
+  box-shadow: 0 4px 14px rgba(0,0,0,.28); opacity: 0; transform: translateY(6px) scale(.9); pointer-events: none; transition: opacity .16s var(--ease), transform .16s var(--ease); }
+.to-latest.show { opacity: 1; transform: none; pointer-events: auto; }
+.to-latest:hover { border-color: var(--omp-purple); }
+.to-latest svg { width: 14px; height: 14px; }
+.to-latest.new::after { content: ''; position: absolute; top: 1px; right: 1px; width: 8px; height: 8px; border-radius: 50%; background: var(--omp-purple); box-shadow: 0 0 0 2px var(--vscode-sideBar-background, #1f2024); }
+.chip-failed { margin-left: 6px; padding: 0 6px; border-radius: 6px; font-size: 11px; line-height: 16px; color: var(--vscode-errorForeground); background: color-mix(in srgb, var(--vscode-errorForeground) 15%, transparent); }
+@media (prefers-reduced-motion: reduce) { .wait-dots i { animation: none; opacity: .6; } }
+.todo-mini { margin-left: auto; display: inline-flex; align-items: center; gap: 8px; flex: none; color: var(--muted); font-size: 11.5px; font-variant-numeric: tabular-nums; }
+.todo-mini .todo-meter { width: 46px; }

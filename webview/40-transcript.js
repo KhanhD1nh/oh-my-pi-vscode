@@ -112,6 +112,7 @@ function flushFrame() {
   for (const { it } of batch) upsertNode(it)
   for (const { after } of batch) after?.()
   if (t && near) requestAnimationFrame(() => { t.scrollTop = t.scrollHeight })
+  else document.getElementById('to-latest')?.classList.add('new')
 }
 function stickBottom(fn) {
   const t = transcriptEl; const near = !t || t.scrollHeight - t.scrollTop - t.clientHeight < 80
@@ -125,7 +126,9 @@ function updateWorking() {
   const turn = list.slice(i + 1)
   const chars = turn.reduce((n, x) => n + (x.type === 'assistant' || x.type === 'thought' ? x.text.length : x.type === 'tool' ? (x.card.input?.length ?? 0) : 0), 0)
   const last = turn.at(-1)
-  const verb = last?.type === 'thought' ? 'Thinking…' : last?.type === 'tool' && last.card.status !== 'completed' ? 'Running…' : last?.type === 'assistant' ? 'Writing…' : 'Working…'
+  const run = [...turn].reverse().find(x => x.type === 'tool' && (x.card.status === 'pending' || x.card.status === 'in_progress'))
+  const what = run ? (run.card.name === 'wait' ? 'Waiting' : verbOf(run.card)) + (() => { let i = {}; try { i = JSON.parse(run.card.input ?? '{}') } catch {} const s = i.i ?? (run.card.name === 'task' ? '' : run.card.title); return s ? ' · ' + String(s).slice(0, 60) : '' })() : ''
+  const verb = last?.type === 'thought' ? 'Thinking…' : what ? what + '…' : last?.type === 'assistant' ? 'Writing…' : 'Working…'
   const tokens = Math.round(chars / 4)
   el.textContent = tokens ? `${verb} · ${tokens.toLocaleString()} tokens` : verb
 }
@@ -134,4 +137,12 @@ function renderWorking() {
   transcriptEl.querySelector('.working')?.remove()
   const t = tab()
   if (t.busy) { transcriptEl.append(h('div', { class: 'working' }, h('span', { class: 'work-ico', 'aria-hidden': 'true' }, h('span', { class: 'tab-spin spin-main' }, SPIN[spinAt])), h('span', { class: 'working-label' }), t.queued ? h('span', { class: 'muted' }, ` · ${t.queued} queued`) : null)); updateWorking() }
+}
+
+/** "↓" over the composer while you read further up; it pulses when something new arrived below. */
+function syncLatest() {
+  const b = document.getElementById('to-latest'); const t = transcriptEl; if (!b || !t) return
+  const away = t.scrollHeight - t.scrollTop - t.clientHeight > 160
+  b.classList.toggle('show', away)
+  if (!away) b.classList.remove('new')
 }

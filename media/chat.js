@@ -92,6 +92,11 @@ function md(src) {
 // Tool cards: verbs, diffs, subagent (task) cards, background jobs.
 // ───────────── tools ─────────────
 const VERB = { read: 'Read', edit: 'Update', delete: 'Delete', move: 'Move', search: 'Search', execute: 'Bash', think: 'Think', fetch: 'Fetch', other: 'Tool' }
+/** omp tool name → verb shown on the step (kind alone says "other" for most of them). */
+const NAME_VERB = { bash: 'Bash', read: 'Read', write: 'Write', edit: 'Update', grep: 'Search', glob: 'Find', find: 'Find', eval: 'Eval', wait: 'Wait', ask: 'Ask', fetch: 'Fetch', web_search: 'Web', browser: 'Browser', lsp: 'LSP', notebook: 'Notebook', todo: 'Todo', task: 'Agents', job: 'Job', jobs: 'Jobs', memory: 'Memory', python: 'Python', ast_grep: 'AST search', image: 'Image' }
+const verbOf = c => NAME_VERB[c.name] ?? (c.name && c.name !== 'tool' && c.kind === 'other' ? cap(c.name.replace(/_/g, ' ')) : VERB[c.kind] ?? VERB.other)
+/** Background job id from omp's "Backgrounded as job bg_N" result. */
+const jobIdOf = c => /\bjob (bg_\d+)/u.exec(c.output ?? '')?.[1]
 /** "modules/fleet/fleet.service.ts" → dim "modules/fleet/" + bold "fleet.service.ts". */
 function pathParts(p) {
   const i = p.lastIndexOf('/')
@@ -204,18 +209,49 @@ function agentEl(c, key, info) {
     !open && c.output && !running ? h('a', { class: 'io-more', onclick: () => toggle(key) }, 'Show result') : null)
 }
 function toolEl(c, key) {
-  if (c.todo) return h('div', { class: 'tool' }, h('div', { class: 'tool-line', onclick: () => toggle(key) }, h('span', { class: 'tool-verb' }, 'Todo'), h('span', { class: 'tool-target' }, c.title)), S.open.has(key) ? todoList(c.todo) : null)
+  if (c.todo) {
+    const all = c.todo.flatMap(p => p.tasks), done = all.filter(t => t.status === 'completed').length
+    const cur = all.find(t => t.status === 'in_progress')
+    let i = {}; try { i = JSON.parse(c.input ?? '{}') } catch {}
+    return h('div', { class: 'tool todo-step' }, h('div', { class: 'tool-line', onclick: () => toggle(key) }, h('span', { class: 'tool-verb' }, 'Todo'),
+      h('span', { class: 'tool-target' }, i.i ?? (cur ? cur.content : c.title)),
+      all.length ? h('span', { class: 'todo-mini', title: `${done} of ${all.length} done` }, h('span', { class: 'todo-meter' }, h('span', { style: `width:${(done / all.length * 100).toFixed(0)}%` })), `${done}/${all.length}`) : null),
+      S.open.has(key) ? todoList(c.todo) : null)
+  }
   const ti = taskInfo(c)
   if (ti) return agentEl(c, key, ti)
   const bg = bgInfo(c)
   if (bg) {
+    const id = jobIdOf(c)
+    const job = id ? bgJobs().find(j => j.jobId === id) : undefined
+    // the tool call returns as soon as the job starts; the job's own state comes from the session file
+    const state = job?.status ?? (c.status === 'failed' ? 'failed' : 'running')
+    const label = bg.name !== 'background' ? bg.name : c.title && c.title !== bg.command && !c.title.startsWith('$') ? c.title : ''
+    const open = S.open.has(key)
     const line = h('div', { class: 'tool-line', onclick: () => toggle(key) },
-      h('span', { class: 'tool-verb' }, 'Background'), h('span', { class: 'tool-target' }, bg.name === 'background' ? (c.title || bg.command).slice(0, 80) : bg.name),
-      h('span', { class: `bg-pill ${c.status}` }, c.status === 'completed' ? 'done' : c.status === 'failed' ? 'failed' : 'running'))
-    return h('div', { class: 'tool' }, line, h('div', { class: 'io' }, inputBanner(c), h('div', { class: 'io-row' }, h('span', { class: 'io-k' }, 'IN'), h('pre', { class: 'io-v' }, bg.command)),
-      S.open.has(key) && c.output ? h('div', { class: 'io-row' }, h('span', { class: 'io-k' }, 'OUT'), h('pre', { class: 'io-v' }, c.output.slice(0, 20000))) : null))
+      h('span', { class: 'tool-verb' }, 'Background'),
+      h('span', { class: 'tool-target', title: bg.command }, label || h('code', { class: 'bg-cmd' }, bg.command.split('\n')[0].slice(0, 120))),
+      id ? h('span', { class: 'job-id' }, id) : null,
+      h('span', { class: `bg-pill ${state}` }, state === 'running' ? runDot() : null, state === 'completed' ? 'done' : state),
+      job?.durationMs != null ? h('span', { class: 'tool-time' }, took(job.durationMs)) : null,
+      id ? h('button', { class: 'bg-open', title: 'Show this job and its output', onclick: e => { e.stopPropagation(); openJob(id) } }, 'Output') : null)
+    // the command box only when the line shows a label (else it would repeat the command) or when opened
+    const showCmd = open || (label && bg.command)
+    return h('div', { class: `tool bg ${state}` }, line, inputBanner(c) || showCmd ? h('div', { class: 'io' }, inputBanner(c),
+      showCmd ? h('div', { class: 'io-row' }, h('span', { class: 'io-k' }, 'IN'), h('div', { class: 'io-v codeblock' }, copyBtn(bg.command), h('pre', {}, bg.command))) : null,
+      open && job?.output ? h('div', { class: 'io-row' }, h('span', { class: 'io-k' }, 'OUT'), h('div', { class: 'io-v codeblock' }, copyBtn(job.output), h('pre', {}, job.output.slice(0, 20000)))) : null) : null)
   }
 
+  if (c.name === 'wait') {
+    let i = {}; try { i = JSON.parse(c.input ?? '{}') } catch {}
+    const ids = [i.jobId, i.job, ...(Array.isArray(i.jobs) ? i.jobs : []), ...(Array.isArray(i.ids) ? i.ids : [])].filter(x => typeof x === 'string')
+    const running = c.status === 'pending' || c.status === 'in_progress'
+    return h('div', { class: 'tool wait' }, h('div', { class: 'tool-line' },
+      h('span', { class: 'tool-verb' }, 'Wait'), h('span', { class: 'tool-target' }, i.i ?? c.title ?? 'for background work'),
+      ids.map(x => h('button', { class: 'job-id link', title: 'Show this job', onclick: e => { e.stopPropagation(); openJob(x) } }, x)),
+      running ? h('span', { class: 'wait-dots', 'aria-hidden': 'true' }, h('i'), h('i'), h('i')) : null,
+      toolTime(c)))
+  }
   const open = S.open.has(key)
   const t = toolTarget(c)
   const bash = c.kind === 'execute'
@@ -223,7 +259,7 @@ function toolEl(c, key) {
   const head = bash && c.title && c.title !== cmd ? c.title : t.text
   const stat = c.diff ? diffStat(c.diff) : null
   const line = h('div', { class: 'tool-line', onclick: () => toggle(key) },
-    h('span', { class: 'tool-verb' }, VERB[c.kind] ?? VERB.other),
+    h('span', { class: 'tool-verb' }, verbOf(c)),
     h('span', { class: `tool-target${t.file ? ' file' : ''}`, title: t.file ?? t.text, onclick: t.file ? e => { e.stopPropagation(); send({ type: 'openFile', path: t.file }) } : undefined }, t.file && head === t.text ? pathParts(t.text) : head),
     stat ? h('span', { class: 'tool-stat' }, h('span', { class: 'plus' }, `+${stat.add}`), ' ', h('span', { class: 'minus' }, `-${stat.del}`)) : null,
     toolTime(c))
@@ -371,6 +407,7 @@ function flushFrame() {
   for (const { it } of batch) upsertNode(it)
   for (const { after } of batch) after?.()
   if (t && near) requestAnimationFrame(() => { t.scrollTop = t.scrollHeight })
+  else document.getElementById('to-latest')?.classList.add('new')
 }
 function stickBottom(fn) {
   const t = transcriptEl; const near = !t || t.scrollHeight - t.scrollTop - t.clientHeight < 80
@@ -384,7 +421,9 @@ function updateWorking() {
   const turn = list.slice(i + 1)
   const chars = turn.reduce((n, x) => n + (x.type === 'assistant' || x.type === 'thought' ? x.text.length : x.type === 'tool' ? (x.card.input?.length ?? 0) : 0), 0)
   const last = turn.at(-1)
-  const verb = last?.type === 'thought' ? 'Thinking…' : last?.type === 'tool' && last.card.status !== 'completed' ? 'Running…' : last?.type === 'assistant' ? 'Writing…' : 'Working…'
+  const run = [...turn].reverse().find(x => x.type === 'tool' && (x.card.status === 'pending' || x.card.status === 'in_progress'))
+  const what = run ? (run.card.name === 'wait' ? 'Waiting' : verbOf(run.card)) + (() => { let i = {}; try { i = JSON.parse(run.card.input ?? '{}') } catch {} const s = i.i ?? (run.card.name === 'task' ? '' : run.card.title); return s ? ' · ' + String(s).slice(0, 60) : '' })() : ''
+  const verb = last?.type === 'thought' ? 'Thinking…' : what ? what + '…' : last?.type === 'assistant' ? 'Writing…' : 'Working…'
   const tokens = Math.round(chars / 4)
   el.textContent = tokens ? `${verb} · ${tokens.toLocaleString()} tokens` : verb
 }
@@ -393,6 +432,14 @@ function renderWorking() {
   transcriptEl.querySelector('.working')?.remove()
   const t = tab()
   if (t.busy) { transcriptEl.append(h('div', { class: 'working' }, h('span', { class: 'work-ico', 'aria-hidden': 'true' }, h('span', { class: 'tab-spin spin-main' }, SPIN[spinAt])), h('span', { class: 'working-label' }), t.queued ? h('span', { class: 'muted' }, ` · ${t.queued} queued`) : null)); updateWorking() }
+}
+
+/** "↓" over the composer while you read further up; it pulses when something new arrived below. */
+function syncLatest() {
+  const b = document.getElementById('to-latest'); const t = transcriptEl; if (!b || !t) return
+  const away = t.scrollHeight - t.scrollTop - t.clientHeight > 160
+  b.classList.toggle('show', away)
+  if (!away) b.classList.remove('new')
 }
 
 // Chat view, composer, menus (model, mode, add, slash, files), history / sidebar.
@@ -440,7 +487,9 @@ function chatView() {
     transcriptEl.append(frag)
   }
   renderWorking()
-  const wrap = h('div', { class: 'composer-wrap' }, goalBar(), todoBar(), composer(), statusLine())
+  const down = h('button', { class: 'to-latest', id: 'to-latest', title: 'Jump to latest', 'aria-label': 'Jump to latest', onclick: () => transcriptEl.scrollTo({ top: transcriptEl.scrollHeight, behavior: 'smooth' }) }, svg(ICON.chevron))
+  transcriptEl.addEventListener('scroll', syncLatest, { passive: true })
+  const wrap = h('div', { class: 'composer-wrap' }, down, goalBar(), todoBar(), composer(), statusLine())
   queueMicrotask(() => { transcriptEl.scrollTop = transcriptEl.scrollHeight })
   return MODE === 'sidebar' ? [tabbar(), transcriptEl, wrap] : [transcriptEl, wrap]
 }
@@ -941,7 +990,7 @@ window.addEventListener('message', ({ data: m }) => {
       if (firstLoad || m.status !== 'ready') render(); else renderSettingsList()
       return
     }
-    case 'jobs': { if (m.tab !== S.active) return; const same = JSON.stringify(JOBS[m.tab]) === JSON.stringify(m.jobs); JOBS[m.tab] = m.jobs; if (!same) { refreshComposer(); renderJobPanel() } return }
+    case 'jobs': { if (m.tab !== S.active) return; const same = JSON.stringify(JOBS[m.tab]) === JSON.stringify(m.jobs); JOBS[m.tab] = m.jobs; if (!same) { refreshComposer(); renderJobPanel(); if (S.view === 'chat') for (const it of items()) if (it.type === 'tool' && bgInfo(it.card) && nodes.has(it.id)) upsertNode(it) } return }
     case 'agentConversation': {
       const o = agentView.open
       if (!o || o.toolId !== m.toolId || o.name !== m.name) return
@@ -1159,7 +1208,8 @@ function bgChip() {
   if (!agents.length && !jobs.length) return null
   const live = agents.filter(a => a.running).length
   const label = [agents.length ? (live ? `${live}/${agents.length} agents` : `${agents.length} agent${agents.length > 1 ? 's' : ''}`) : '', jobs.length ? `${jobs.filter(j => j.status === 'running').length ? jobs.filter(j => j.status === 'running').length + '/' : ''}${jobs.length} bg` : ''].filter(Boolean).join(' · ')
-  return h('button', { class: `chip-btn jobs${S.menu === 'jobs' ? ' open' : ''}`, title: 'Subagents and background jobs', onclick: () => openMenu('jobs') }, agents.some(a => a.running) || jobs.some(j => j.status === 'running') ? runDot() : (agents.length || jobs.length) ? h('span', { class: 'agent-done-dot', 'aria-hidden': 'true' }) : h('span', { class: 'live busy' }), h('span', { class: 'label' }, label))
+  const failed = jobs.filter(j => j.status === 'failed').length + agents.filter(a => a.failed).length
+  return h('button', { class: `chip-btn jobs${S.menu === 'jobs' ? ' open' : ''}${failed ? ' has-failed' : ''}`, title: 'Subagents and background jobs', onclick: () => openMenu('jobs') }, agents.some(a => a.running) || jobs.some(j => j.status === 'running') ? runDot() : (agents.length || jobs.length) ? h('span', { class: 'agent-done-dot', 'aria-hidden': 'true' }) : h('span', { class: 'live busy' }), h('span', { class: 'label' }, label), failed ? h('span', { class: 'chip-failed', title: `${failed} failed` }, `${failed} ✕`) : null)
 }
 let jobTick = 0
 EVERY_SECOND.push(() => { if (S.view === 'chat' && tab()?.busy && ++jobTick % 5 === 0) refreshJobs() })
@@ -1323,10 +1373,10 @@ function todoBar() {
   const all = ph.flatMap(p => p.tasks), done = all.filter(t => t.status === 'completed').length
   if (!all.length || done === all.length) return null
   const cur = all.find(t => t.status === 'in_progress')
-  const open = !S.todoClosed
+  const open = !!S.todoOpen?.[S.active]
   return h('div', { class: 'todobar', id: 'todobar' },
-    h('button', { class: 'todobar-head', onclick: () => { S.todoClosed = open; refreshTodo() } }, h('span', { class: `chev${open ? ' open' : ''}` }, '›'),
-      h('span', { class: 'todobar-title' }, cur ? cur.content : 'Todo'), h('span', { class: 'muted' }, `${done}/${all.length}`),
+    h('button', { class: 'todobar-head', 'aria-expanded': open ? 'true' : 'false', onclick: () => { (S.todoOpen ??= {})[S.active] = !open; refreshTodo() } }, h('span', { class: `chev${open ? ' open' : ''}` }, '›'),
+      h('span', { class: 'todobar-ico', 'aria-hidden': 'true' }, cur ? '▸' : '○'), h('span', { class: 'todobar-title' }, cur ? cur.content : all.find(t => t.status === 'pending')?.content ?? 'Todo'), h('span', { class: 'todobar-count' }, `${done}/${all.length}`),
       h('span', { class: 'todo-meter' }, h('span', { style: `width:${(done / all.length * 100).toFixed(0)}%` }))),
     open ? todoList(ph, true) : null)
 }

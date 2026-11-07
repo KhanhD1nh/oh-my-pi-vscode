@@ -61,7 +61,8 @@ function bgChip() {
   if (!agents.length && !jobs.length) return null
   const live = agents.filter(a => a.running).length
   const label = [agents.length ? (live ? `${live}/${agents.length} agents` : `${agents.length} agent${agents.length > 1 ? 's' : ''}`) : '', jobs.length ? `${jobs.filter(j => j.status === 'running').length ? jobs.filter(j => j.status === 'running').length + '/' : ''}${jobs.length} bg` : ''].filter(Boolean).join(' · ')
-  return h('button', { class: `chip-btn jobs${S.menu === 'jobs' ? ' open' : ''}`, title: 'Subagents and background jobs', onclick: () => openMenu('jobs') }, agents.some(a => a.running) || jobs.some(j => j.status === 'running') ? runDot() : (agents.length || jobs.length) ? h('span', { class: 'agent-done-dot', 'aria-hidden': 'true' }) : h('span', { class: 'live busy' }), h('span', { class: 'label' }, label))
+  const failed = jobs.filter(j => j.status === 'failed').length + agents.filter(a => a.failed).length
+  return h('button', { class: `chip-btn jobs${S.menu === 'jobs' ? ' open' : ''}${failed ? ' has-failed' : ''}`, title: 'Subagents and background jobs', onclick: () => openMenu('jobs') }, agents.some(a => a.running) || jobs.some(j => j.status === 'running') ? runDot() : (agents.length || jobs.length) ? h('span', { class: 'agent-done-dot', 'aria-hidden': 'true' }) : h('span', { class: 'live busy' }), h('span', { class: 'label' }, label), failed ? h('span', { class: 'chip-failed', title: `${failed} failed` }, `${failed} ✕`) : null)
 }
 let jobTick = 0
 EVERY_SECOND.push(() => { if (S.view === 'chat' && tab()?.busy && ++jobTick % 5 === 0) refreshJobs() })
