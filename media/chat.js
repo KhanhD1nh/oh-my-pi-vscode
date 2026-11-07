@@ -592,7 +592,7 @@ function menuEl() {
     const { agents, jobs } = activity()
     const jump = id => { closeMenu(); const n = nodes.get(id); n?.scrollIntoView({ block: 'center', behavior: 'smooth' }); n?.classList.add('flash'); setTimeout(() => n?.classList.remove('flash'), 900) }
     return h('div', { class: 'menu', style: 'left:6px;min-width:260px' },
-      agents.length ? [h('div', { class: 'menu-group' }, `Subagents · ${agents.filter(a => a.running).length} running`), agents.map(a => h('button', { class: 'menu-item agent-item', title: a.task, onclick: () => { closeMenu(); openAgent(a.cid, a.label, a.id) } }, a.running ? runDot() : h('span', { class: `agent-state ${a.failed ? 'failed' : 'done'}` }, a.failed ? '✕' : '✓'), h('span', { class: 'agent-item-name' }, a.label), a.agent ? h('span', { class: 'agent-kind' }, a.agent) : null, h('span', { class: 'desc' }, a.startedAt ? took((a.endedAt ?? Date.now()) - a.startedAt) : ''))), h('div', { class: 'menu-sep' })] : null,
+      agents.length ? [h('div', { class: 'menu-group' }, `Subagents · ${agents.filter(a => a.running).length} running`), agents.map(a => h('button', { class: 'menu-item agent-item', title: a.task, onclick: () => { closeMenu(); openAgent(a.cid, a.label, a.id) } }, a.running ? runDot() : h('span', { class: `agent-state ${a.failed ? 'failed' : 'done'}` }, a.failed ? '✕' : '✓'), h('span', { class: 'agent-item-name' }, a.label), a.agent ? h('span', { class: 'agent-kind' }, a.agent) : null, h('span', { class: 'desc' }, a.startedAt && (a.endedAt ?? Date.now()) - a.startedAt >= 1000 ? took((a.endedAt ?? Date.now()) - a.startedAt) : ''))), h('div', { class: 'menu-sep' })] : null,
       bgJobs().length ? [h('div', { class: 'menu-group' }, `Background · ${bgJobs().filter(j => j.status === 'running').length} running`), bgJobs().slice(-12).reverse().map(j => h('button', { class: 'menu-item agent-item', title: j.label, onclick: () => { closeMenu(); openJob(j.jobId) } }, jobState(j.status), h('span', { class: 'agent-item-name job-label' }, j.label), h('span', { class: 'desc' }, j.durationMs != null ? took(j.durationMs) : j.status === 'running' && j.at ? took(Date.now() - j.at) : ''))), bgJobs().length > 12 ? h('button', { class: 'menu-item muted', onclick: () => { closeMenu(); openJob(null) } }, `All ${bgJobs().length} jobs…`) : null] : jobs.length ? [h('div', { class: 'menu-group' }, 'Background'), jobs.map(j => h('button', { class: 'menu-item', onclick: () => jump(j.id) }, runDot(), h('span', {}, j.label), h('span', { class: 'desc' }, j.command)))] : null,
       h('div', { class: 'menu-group' }, 'Ask omp'),
       h('button', { class: 'menu-item', onclick: () => { closeMenu(); send({ type: 'prompt', tab: S.active, text: 'read jobs:// and give me the status of every running task and background service' }) } }, 'Check status of all jobs'))
@@ -887,7 +887,7 @@ document.addEventListener('click', (e) => {
   }
   const a = e.target.closest?.('a.file')
   if (a) { e.preventDefault(); send({ type: 'openFile', path: a.dataset.path, ...a.dataset.line ? { line: Number(a.dataset.line) } : {} }); return }
-  if (S.menu && !e.target.closest('.menu') && !e.target.closest('.chip-btn') && !e.target.closest('#input')) closeMenu()
+  if (S.menu && !e.target.closest('.menu') && !e.target.closest('.chip-btn') && !(e.target.closest('#input') && (S.menu === 'slash' || S.menu === 'files'))) closeMenu()
 })
 
 window.addEventListener('message', ({ data: m }) => {
@@ -906,7 +906,7 @@ window.addEventListener('message', ({ data: m }) => {
       if (i < 0) return
       const was = S.tabs[i]
       S.tabs[i] = m.tab
-      if (!m.tab.busy && was.busy && m.tab.id === S.active) refreshJobs()
+      if (!m.tab.busy && was.busy && m.tab.id === S.active) { refreshJobs(); if (S.menu === 'jobs') S.menu = null }
       if (m.tab.busy && !was.busy) { const st = (STAT[m.tab.id] ??= { chars: 0, total: 0, t0: 0, last: 0 }); st.chars = 0; st.t0 = 0 }
       if (m.tab.id === S.active) { refreshStatus(); refreshGoal() }
       if (S.view !== 'chat') return

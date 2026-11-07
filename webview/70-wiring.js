@@ -31,7 +31,7 @@ document.addEventListener('click', (e) => {
   }
   const a = e.target.closest?.('a.file')
   if (a) { e.preventDefault(); send({ type: 'openFile', path: a.dataset.path, ...a.dataset.line ? { line: Number(a.dataset.line) } : {} }); return }
-  if (S.menu && !e.target.closest('.menu') && !e.target.closest('.chip-btn') && !e.target.closest('#input')) closeMenu()
+  if (S.menu && !e.target.closest('.menu') && !e.target.closest('.chip-btn') && !(e.target.closest('#input') && (S.menu === 'slash' || S.menu === 'files'))) closeMenu()
 })
 
 window.addEventListener('message', ({ data: m }) => {
@@ -50,7 +50,7 @@ window.addEventListener('message', ({ data: m }) => {
       if (i < 0) return
       const was = S.tabs[i]
       S.tabs[i] = m.tab
-      if (!m.tab.busy && was.busy && m.tab.id === S.active) refreshJobs()
+      if (!m.tab.busy && was.busy && m.tab.id === S.active) { refreshJobs(); if (S.menu === 'jobs') S.menu = null }
       if (m.tab.busy && !was.busy) { const st = (STAT[m.tab.id] ??= { chars: 0, total: 0, t0: 0, last: 0 }); st.chars = 0; st.t0 = 0 }
       if (m.tab.id === S.active) { refreshStatus(); refreshGoal() }
       if (S.view !== 'chat') return
