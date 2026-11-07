@@ -187,8 +187,12 @@ export class OmpSession {
     const id = this.keyAsk; this.keyAsk = undefined
     if (id === undefined || !this.asks.has(id)) return false
     const item = this.transcript.items.find(i => i.id === id)
-    const field = item?.type === 'ask' ? Object.keys(item.schema.properties ?? {})[0] : undefined
-    this.answer(id, 'accept', field ? { [field]: 'Loaded' } : undefined)
+    // answer with a value omp offered (the model names the option itself: "Loaded", "Loaded-preview"…);
+    // anything else reads as a cancel on omp's side
+    const [field, p] = item?.type === 'ask' ? Object.entries(item.schema.properties ?? {})[0] ?? [] : []
+    const offered = p ? [...p.oneOf?.map(o => o.const) ?? [], ...p.enum ?? [], ...p.items?.anyOf?.map(o => o.const) ?? [], ...p.items?.enum ?? []] : []
+    const value = offered.find(v => /load|yes|continue|done|ok/iu.test(v) && !/\bnot\b|\bno\b|chưa|không/iu.test(v)) ?? offered[0] ?? 'Loaded'
+    this.answer(id, 'accept', field ? { [field]: p?.type === 'array' ? [value] : value } : undefined)
     return true
   }
   /**

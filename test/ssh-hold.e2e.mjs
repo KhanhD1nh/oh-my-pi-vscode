@@ -13,7 +13,7 @@ const ev = {
   item: (_s, it) => {
     if (it.type === 'notice') console.log(at(), 'notice:', it.text)
     if (it.type === 'ask' && it.hold === 'ssh' && !it.answer && !held) {
-      held = true; console.log(at(), 'omp holds its turn (ask):', it.message.slice(0, 80))
+      held = true; console.log(at(), 'omp holds its turn (ask):', it.message.slice(0, 80), JSON.stringify(it.schema).slice(0, 400))
       // you type the passphrase 20 s later
       setTimeout(() => { writeFileSync(`${dir}/key-loaded`, ''); console.log(at(), 'key loaded → released:', s.keyLoaded()) }, 20_000)
     }
