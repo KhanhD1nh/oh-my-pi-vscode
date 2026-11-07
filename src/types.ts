@@ -136,6 +136,8 @@ export type HostMessage =
   | { type: 'files'; query: string; files: string[] }
   | { type: 'approval'; value: string }
   | { type: 'jobs'; tab: string; jobs: import('./stats.ts').JobInfo[] }
+  | { type: 'sshKeys'; keys: string[] }
+  | { type: 'unlocked'; key: string; ok: boolean; message: string }
   | { type: 'agentConversation'; toolId: string; name: string; entries: import('./stats.ts').AgentEntry[]; model?: string; cost: number; missing?: boolean }
   | { type: 'agentSteps'; toolId: string; name: string; steps: { tool?: string; label: string; status: 'running' | 'done' | 'failed' }[]; model?: string; cost: number }
 
@@ -151,6 +153,8 @@ export type WebviewMessage =
   | { type: 'setThinking'; tab: string; value: string }
   | { type: 'setMode'; tab: string; value: string }
   | { type: 'autopilot'; tab: string; on: boolean }
+  | { type: 'sshKeys' }
+  | { type: 'unlockKey'; tab: string; key: string; passphrase: string }
   | { type: 'openFile'; path: string; line?: number }
   | { type: 'openDiff'; tab: string; toolId: string }
   | { type: 'listSessions' }

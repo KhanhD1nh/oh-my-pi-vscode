@@ -73,13 +73,37 @@ function diffEl(d) {
  * The command waits for something only you can type (passphrase, password, yes/no). omp cannot take keyboard
  * input, so offer the command in a VS Code terminal, typed but not run.
  */
+const SSH = { keys: null, state: {} }
+function sshForm(c) {
+  if (!/ssh|passphrase/iu.test(c.needsInput)) return null
+  if (SSH.keys === null) { SSH.keys = []; send({ type: 'sshKeys' }) }
+  const st = SSH.state[c.id] ?? {}
+  if (st.ok) return h('div', { class: 'ssh-form ok' }, h('span', { class: 'agent-state done' }, '✓'), `Key loaded into ssh-agent — omp was told to retry.`)
+  const pick = h('select', { class: 'ssh-key', 'aria-label': 'SSH key' }, (SSH.keys.length ? SSH.keys : ['~/.ssh/id_ed25519']).map(k => h('option', { value: k, ...k === st.key ? { selected: true } : {} }, k.split(/[\\/]/u).pop())))
+  const pass = h('input', { type: 'password', class: 'ssh-pass', placeholder: 'Passphrase', autocomplete: 'off', spellcheck: 'false', 'aria-label': 'Passphrase' })
+  const go = () => {
+    if (!pass.value || st.busy) return
+    SSH.state[c.id] = { key: pick.value, busy: true }
+    send({ type: 'unlockKey', tab: S.active, key: pick.value, passphrase: pass.value })
+    pass.value = ''
+    refreshSsh(c.id)
+  }
+  pass.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); go() } e.stopPropagation() })
+  return h('div', { class: 'ssh-form' }, pick, pass,
+    h('button', { class: 'need-btn primary', disabled: st.busy ? true : undefined, onclick: e => { e.stopPropagation(); go() } }, st.busy ? 'Unlocking…' : 'Unlock key'),
+    st.error ? h('span', { class: 'ssh-err', role: 'alert' }, st.error) : null)
+}
+function refreshSsh(id) { const it = items().find(x => x.type === 'tool' && x.card.id === id); if (it) upsertNode(it) }
 function inputBanner(c) {
   if (!c.needsInput) return null
   const btn = h('button', { class: 'need-btn', onclick: e => { e.stopPropagation(); send({ type: 'runInTerminal', tab: S.active, toolId: c.id }) } }, svg(ICON.terminal), 'Open in terminal')
-  return h('div', { class: 'need-input', role: 'status' },
-    h('span', { class: 'need-ico', 'aria-hidden': 'true' }, '⌨'),
-    h('span', { class: 'need-text' }, h('b', {}, 'Needs your input'), ` — ${c.needsInput}. omp can't type it for you; run it in a terminal.`),
-    btn)
+  const ssh = sshForm(c)
+  return h('div', { class: `need-input${ssh ? ' has-form' : ''}`, role: 'status' },
+    h('div', { class: 'need-row' },
+      h('span', { class: 'need-ico', 'aria-hidden': 'true' }, '⌨'),
+      h('span', { class: 'need-text' }, h('b', {}, 'Needs your input'), ssh ? ` — ${c.needsInput}. Type the key passphrase here; it goes only to ssh-agent.` : ` — ${c.needsInput}. omp can't type it for you; run it in a terminal.`),
+      btn),
+    ssh)
 }
 /** Duration on a tool line: live while running (ticks once a second), fixed when done; hidden under 1 s. */
 function toolTime(c) {

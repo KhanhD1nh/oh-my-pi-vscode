@@ -2,6 +2,7 @@
 import * as vscode from 'vscode'
 import type { ChatProvider } from './chats.ts'
 import { agentConversation, agentSteps, sessionJobs } from './stats.ts'
+import { sshKeys, unlockKey } from './sshUnlock.ts'
 import type { HostMessage, WebviewMessage } from './types.ts'
 import { exportChat, findFiles, mentionText, openDiff, openFile, revertEditsAfter } from './workspace.ts'
 
@@ -86,6 +87,14 @@ export async function handleMessage(p: ChatProvider, m: WebviewMessage, from: st
     case 'permit': p.tab(m.tab)?.session.choose(m.itemId, m.optionId); return
     case 'answer': p.tab(m.tab)?.session.answer(m.itemId, m.action, m.content); return
     case 'rewind': { const t = p.tab(m.tab); if (t) await revertEditsAfter(t.session.transcript.items, m.itemId); return }
+    case 'sshKeys': reply({ type: 'sshKeys', keys: await sshKeys() }); return
+    case 'unlockKey': {
+      const r = await unlockKey(m.key, m.passphrase, p.storage)
+      reply({ type: 'unlocked', key: m.key, ...r })
+      // the key is in the agent now: tell the running turn (or the next one) to try again
+      if (r.ok) { const t = p.tab(m.tab); if (t) { const msg = `I loaded the SSH key ${m.key.split(/[\\/]/u).pop()} into ssh-agent. Retry the ssh/git command that failed and continue.`; if (t.session.busy) t.session.nudge(msg, 'SSH key loaded — told omp to retry'); else t.session.prompt(msg) } }
+      return
+    }
     case 'runInTerminal': {
       const t = p.tab(m.tab)
       const card = t?.session.transcript.card(m.toolId)

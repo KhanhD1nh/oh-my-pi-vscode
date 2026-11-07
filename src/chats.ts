@@ -53,6 +53,9 @@ export class ChatProvider implements vscode.WebviewViewProvider {
 
   // ── lookups ──
 
+  /** Folder for small helper files (the SSH askpass script). */
+  get storage(): string { return this.context.globalStorageUri.fsPath }
+
   tab(id: string | undefined): ChatTab | undefined { return this.tabs.find(t => t.session.id === id) }
 
   /** Folder of the active editor, else the first workspace folder, else home. */

@@ -872,3 +872,15 @@ body.vscode-high-contrast .to-latest { border-color: var(--vscode-contrastBorder
 .notice-ico { color: var(--omp-purple); font-size: 12px; }
 .notice-at { margin-left: auto; font-variant-numeric: tabular-nums; opacity: .7; }
 .step.notice-step::before { background: var(--omp-purple); opacity: .6; }
+
+/* SSH passphrase box in the needs-input banner */
+.need-input.has-form { flex-direction: column; align-items: stretch; }
+.need-row { display: flex; align-items: center; gap: 10px; }
+.ssh-form { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+.ssh-key, .ssh-pass { height: 26px; border-radius: 6px; border: 1px solid var(--line); background: var(--vscode-input-background); color: var(--vscode-input-foreground, var(--vscode-foreground)); padding: 0 8px; font: inherit; font-size: 12px; }
+.ssh-pass { flex: 1; min-width: 140px; }
+.ssh-pass:focus, .ssh-key:focus { outline: 1px solid var(--vscode-focusBorder); outline-offset: -1px; }
+.need-btn.primary { background: var(--vscode-button-background); color: var(--vscode-button-foreground); border-color: transparent; }
+.need-btn.primary:disabled { opacity: .6; cursor: default; }
+.ssh-err { color: var(--vscode-errorForeground, #f85149); font-size: 12px; flex-basis: 100%; }
+.ssh-form.ok { color: var(--vscode-testing-iconPassed, #3fb950); font-size: 12px; gap: 6px; }

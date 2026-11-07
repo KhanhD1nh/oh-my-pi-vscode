@@ -168,9 +168,9 @@ export class OmpSession {
   }
 
   /** Autopilot: tell the running turn to stop a wait that will never return. */
-  nudge(text: string): void {
+  nudge(text: string, notice = 'Autopilot: the wait had nothing left to wait for — told omp to read the results and go on'): void {
     if (!this.busy) return
-    this.events.item(this, this.transcript.notice('Autopilot: the wait had nothing left to wait for — told omp to read the results and go on'))
+    this.events.item(this, this.transcript.notice(notice))
     if (this.host.steering) void this.host.rpc().request('_session/steering', { sessionId: this.id, prompt: [{ type: 'text', text }] }).catch(() => {})
   }
 

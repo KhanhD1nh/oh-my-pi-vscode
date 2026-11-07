@@ -86,6 +86,14 @@ window.addEventListener('message', ({ data: m }) => {
       if (firstLoad || m.status !== 'ready') render(); else renderSettingsList()
       return
     }
+    case 'sshKeys': SSH.keys = m.keys; for (const it of items()) if (it.type === 'tool' && it.card.needsInput) refreshSsh(it.card.id); return
+    case 'unlocked': {
+      for (const [id, st] of Object.entries(SSH.state)) if (st.busy && st.key === m.key) SSH.state[id] = m.ok ? { ok: true } : { key: m.key, error: m.message }
+      // one key unlocks every SSH card of the chat
+      if (m.ok) for (const it of items()) if (it.type === 'tool' && it.card.needsInput && /ssh|passphrase/iu.test(it.card.needsInput)) SSH.state[it.card.id] = { ok: true }
+      for (const id of Object.keys(SSH.state)) refreshSsh(id)
+      return
+    }
     case 'jobs': { if (m.tab !== S.active) return; const same = JSON.stringify(JOBS[m.tab]) === JSON.stringify(m.jobs); JOBS[m.tab] = m.jobs; if (!same) { refreshComposer(); renderJobPanel(); if (S.view === 'chat') for (const it of items()) if (it.type === 'tool' && bgInfo(it.card) && nodes.has(it.id)) upsertNode(it) } return }
     case 'agentConversation': {
       const o = agentView.open

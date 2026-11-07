@@ -55,6 +55,11 @@ function keepScrolledParts(old, fresh) {
   // Moving an element out of the page resets its scroll offset, even when it comes straight back: read every
   // offset first, put them back right after the swap (same task, before the next paint, so nothing jumps).
   const restore = []
+  // a half-typed passphrase (and the chosen key) survive the card being rebuilt by an omp update
+  const pass = old.querySelector('.ssh-pass'), slot = fresh.querySelector('.ssh-pass')
+  if (pass && slot) { const v = pass.value, focused = document.activeElement === pass; slot.value = v; restore.push(() => { if (focused) slot.focus() }) }
+  const key = old.querySelector('.ssh-key'), keySlot = fresh.querySelector('.ssh-key')
+  if (key && keySlot) keySlot.value = key.value
   for (const list of old.querySelectorAll('.agent-steps[data-k]')) {
     const slot = fresh.querySelector(`.agent-steps[data-k="${CSS.escape(list.dataset.k)}"]`)
     if (!slot) continue
