@@ -93,15 +93,37 @@ function sshForm(c) {
     h('button', { class: 'need-btn primary', disabled: st.busy ? true : undefined, onclick: e => { e.stopPropagation(); go() } }, st.busy ? 'Unlocking…' : 'Unlock key'),
     st.error ? h('span', { class: 'ssh-err', role: 'alert' }, st.error) : null)
 }
-function refreshSsh(id) { const it = items().find(x => x.type === 'tool' && x.card.id === id); if (it) upsertNode(it) }
+/** Newest SSH card of the chat still waiting for a key, if any. */
+function sshPending() {
+  const list = items()
+  for (let i = list.length - 1; i >= 0; i--) {
+    const it = list[i]
+    if (it.type !== 'tool' || !it.card.needsInput || !/ssh|passphrase/iu.test(it.card.needsInput)) continue
+    return SSH.state[it.card.id]?.ok ? null : it.card
+  }
+  return null
+}
+/** Pinned above the composer: unlock the key without scrolling back to the card that failed. */
+function sshBar() {
+  const c = sshPending(); if (!c) return null
+  const f = sshForm(c); if (!f) return null
+  return h('div', { class: 'ssh-bar', id: 'ssh-bar', role: 'region', 'aria-label': 'Unlock SSH key' },
+    h('div', { class: 'ssh-bar-head' }, h('span', { class: 'need-ico', 'aria-hidden': 'true' }, '🔑'), h('b', {}, 'SSH key locked'), h('span', { class: 'muted' }, ` — omp's ssh needs it (${c.needsInput}). The passphrase goes only to ssh-agent.`)),
+    f)
+}
+function refreshSshBar() { const el = document.getElementById('ssh-bar'), fresh = sshBar(); if (el) { if (fresh) { const v = el.querySelector('.ssh-pass')?.value; el.replaceWith(fresh); if (v) fresh.querySelector('.ssh-pass').value = v } else el.remove() } else if (fresh) document.querySelector('.composer-wrap')?.prepend(fresh) }
+function refreshSsh(id) { const it = items().find(x => x.type === 'tool' && x.card.id === id); if (it) upsertNode(it); refreshSshBar() }
 function inputBanner(c) {
   if (!c.needsInput) return null
-  const btn = h('button', { class: 'need-btn', onclick: e => { e.stopPropagation(); send({ type: 'runInTerminal', tab: S.active, toolId: c.id }) } }, svg(ICON.terminal), 'Open in terminal')
-  const ssh = sshForm(c)
+  const btn = h('button', { class: 'need-btn secondary', onclick: e => { e.stopPropagation(); send({ type: 'runInTerminal', tab: S.active, toolId: c.id }) } }, svg(ICON.terminal), 'Open in terminal')
+  const isSsh = /ssh|passphrase/iu.test(c.needsInput)
+  const done = isSsh && SSH.state[c.id]?.ok
+  const ssh = done ? h('div', { class: 'ssh-form ok' }, h('span', { class: 'agent-state done' }, '✓'), 'Key loaded into ssh-agent — omp was told to retry.') : null
   return h('div', { class: `need-input${ssh ? ' has-form' : ''}`, role: 'status' },
     h('div', { class: 'need-row' },
       h('span', { class: 'need-ico', 'aria-hidden': 'true' }, '⌨'),
-      h('span', { class: 'need-text' }, h('b', {}, 'Needs your input'), ssh ? ` — ${c.needsInput}. Type the key passphrase here; it goes only to ssh-agent.` : ` — ${c.needsInput}. omp can't type it for you; run it in a terminal.`),
+      h('span', { class: 'need-text' }, h('b', {}, 'Needs your input'), isSsh ? ` — ${c.needsInput}. Unlock the key in the box above the message input.` : ` — ${c.needsInput}. omp can't type it for you; run it in a terminal.`),
+      isSsh && !done ? h('button', { class: 'need-btn primary', onclick: e => { e.stopPropagation(); refreshSshBar(); const f = document.querySelector('#ssh-bar .ssh-pass'); f?.focus(); f?.scrollIntoView({ block: 'nearest' }) } }, '🔑 Enter passphrase') : null,
       btn),
     ssh)
 }

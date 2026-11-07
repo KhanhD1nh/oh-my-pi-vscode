@@ -74,7 +74,7 @@ window.addEventListener('message', ({ data: m }) => {
       trackStream(m.tab, m.item, i >= 0 ? list[i].text?.length : 0)
       if (m.item.card && bgInfo(m.item.card) && m.tab === S.active && (i < 0 || list[i].card?.status !== m.item.card.status)) refreshJobs()
       if (i >= 0) list[i] = m.item; else list.push(m.item)
-      if (m.tab === S.active && S.view === 'chat') queueUpsert(m.item, () => { updateWorking(); if (m.item.card?.todo) refreshTodo() })
+      if (m.tab === S.active && S.view === 'chat') queueUpsert(m.item, () => { updateWorking(); if (m.item.card?.todo) refreshTodo(); if (m.item.card?.needsInput) refreshSshBar() })
       return
     }
     case 'files': if (S.menu === 'files' && m.query === S.fileQuery) { S.files = m.files; S.menuIndex = 0; refreshComposer() } return

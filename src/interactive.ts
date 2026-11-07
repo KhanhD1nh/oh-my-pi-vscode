@@ -14,6 +14,7 @@ const PROMPTS: [RegExp, string][] = [
   [/\(y\/n\)|\[y\/n\]|\(yes\/no\)/iu, 'yes/no answer'],
   [/username for 'https?:/iu, 'git username'],
   [/permission denied \(publickey/iu, 'SSH key (load it with ssh-add)'],
+  [/the agent has no identities|error connecting to agent|could not open a connection to your authentication agent/iu, 'SSH key (load it with ssh-add)'],
 ]
 
 /** Command shapes that are interactive by themselves (an ssh session with no remote command, sudo, passwd…). */
@@ -31,6 +32,8 @@ const COMMANDS: [RegExp, string][] = [
  * @returns why a person is needed, or undefined.
  */
 export function needsInput(command: string, output = '', pty = false): string | undefined {
+  // `FOO=1 BAR=x ssh-add -l` is still ssh-add
+  command = command.replace(/^\s*(?:[A-Za-z_][A-Za-z0-9_]*=(?:"[^"]*"|'[^']*'|\S*)\s+)+/u, '')
   const tail = output.slice(-2000)
   for (const [re, why] of PROMPTS) if (re.test(tail)) return why
   for (const [re, why] of COMMANDS) if (re.test(command)) return why

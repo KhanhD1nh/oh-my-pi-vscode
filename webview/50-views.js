@@ -58,7 +58,7 @@ function chatView() {
   renderWorking()
   const down = h('button', { class: 'to-latest', id: 'to-latest', title: 'Jump to latest', 'aria-label': 'Jump to latest', onclick: () => transcriptEl.scrollTo({ top: transcriptEl.scrollHeight, behavior: 'smooth' }) }, svg(ICON.chevron))
   transcriptEl.addEventListener('scroll', syncLatest, { passive: true })
-  const wrap = h('div', { class: 'composer-wrap' }, down, goalBar(), todoBar(), composer(), statusLine())
+  const wrap = h('div', { class: 'composer-wrap' }, down, sshBar(), goalBar(), todoBar(), composer(), statusLine())
   queueMicrotask(() => { transcriptEl.scrollTop = transcriptEl.scrollHeight })
   return MODE === 'sidebar' ? [tabbar(), transcriptEl, wrap] : [transcriptEl, wrap]
 }

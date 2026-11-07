@@ -191,15 +191,37 @@ function sshForm(c) {
     h('button', { class: 'need-btn primary', disabled: st.busy ? true : undefined, onclick: e => { e.stopPropagation(); go() } }, st.busy ? 'Unlocking…' : 'Unlock key'),
     st.error ? h('span', { class: 'ssh-err', role: 'alert' }, st.error) : null)
 }
-function refreshSsh(id) { const it = items().find(x => x.type === 'tool' && x.card.id === id); if (it) upsertNode(it) }
+/** Newest SSH card of the chat still waiting for a key, if any. */
+function sshPending() {
+  const list = items()
+  for (let i = list.length - 1; i >= 0; i--) {
+    const it = list[i]
+    if (it.type !== 'tool' || !it.card.needsInput || !/ssh|passphrase/iu.test(it.card.needsInput)) continue
+    return SSH.state[it.card.id]?.ok ? null : it.card
+  }
+  return null
+}
+/** Pinned above the composer: unlock the key without scrolling back to the card that failed. */
+function sshBar() {
+  const c = sshPending(); if (!c) return null
+  const f = sshForm(c); if (!f) return null
+  return h('div', { class: 'ssh-bar', id: 'ssh-bar', role: 'region', 'aria-label': 'Unlock SSH key' },
+    h('div', { class: 'ssh-bar-head' }, h('span', { class: 'need-ico', 'aria-hidden': 'true' }, '🔑'), h('b', {}, 'SSH key locked'), h('span', { class: 'muted' }, ` — omp's ssh needs it (${c.needsInput}). The passphrase goes only to ssh-agent.`)),
+    f)
+}
+function refreshSshBar() { const el = document.getElementById('ssh-bar'), fresh = sshBar(); if (el) { if (fresh) { const v = el.querySelector('.ssh-pass')?.value; el.replaceWith(fresh); if (v) fresh.querySelector('.ssh-pass').value = v } else el.remove() } else if (fresh) document.querySelector('.composer-wrap')?.prepend(fresh) }
+function refreshSsh(id) { const it = items().find(x => x.type === 'tool' && x.card.id === id); if (it) upsertNode(it); refreshSshBar() }
 function inputBanner(c) {
   if (!c.needsInput) return null
-  const btn = h('button', { class: 'need-btn', onclick: e => { e.stopPropagation(); send({ type: 'runInTerminal', tab: S.active, toolId: c.id }) } }, svg(ICON.terminal), 'Open in terminal')
-  const ssh = sshForm(c)
+  const btn = h('button', { class: 'need-btn secondary', onclick: e => { e.stopPropagation(); send({ type: 'runInTerminal', tab: S.active, toolId: c.id }) } }, svg(ICON.terminal), 'Open in terminal')
+  const isSsh = /ssh|passphrase/iu.test(c.needsInput)
+  const done = isSsh && SSH.state[c.id]?.ok
+  const ssh = done ? h('div', { class: 'ssh-form ok' }, h('span', { class: 'agent-state done' }, '✓'), 'Key loaded into ssh-agent — omp was told to retry.') : null
   return h('div', { class: `need-input${ssh ? ' has-form' : ''}`, role: 'status' },
     h('div', { class: 'need-row' },
       h('span', { class: 'need-ico', 'aria-hidden': 'true' }, '⌨'),
-      h('span', { class: 'need-text' }, h('b', {}, 'Needs your input'), ssh ? ` — ${c.needsInput}. Type the key passphrase here; it goes only to ssh-agent.` : ` — ${c.needsInput}. omp can't type it for you; run it in a terminal.`),
+      h('span', { class: 'need-text' }, h('b', {}, 'Needs your input'), isSsh ? ` — ${c.needsInput}. Unlock the key in the box above the message input.` : ` — ${c.needsInput}. omp can't type it for you; run it in a terminal.`),
+      isSsh && !done ? h('button', { class: 'need-btn primary', onclick: e => { e.stopPropagation(); refreshSshBar(); const f = document.querySelector('#ssh-bar .ssh-pass'); f?.focus(); f?.scrollIntoView({ block: 'nearest' }) } }, '🔑 Enter passphrase') : null,
       btn),
     ssh)
 }
@@ -564,7 +586,7 @@ function turnSummary(list, i) {
     h('span', {}, `${tools.length} tools`),
     files.size ? h('span', {}, `${files.size} file${files.size > 1 ? 's' : ''} `, h('span', { class: 'plus' }, `+${add}`), ' ', h('span', { class: 'minus' }, `−${del}`)) : null,
     failed ? h('span', { class: 'minus' }, `${failed} failed`) : null,
-    start && end > start ? h('span', {}, took(end - start)) : null)
+    start && end - start >= 1000 ? h('span', {}, took(end - start)) : null)
 }
 
 // Chat view, composer, menus (model, mode, add, slash, files), history / sidebar.
@@ -627,7 +649,7 @@ function chatView() {
   renderWorking()
   const down = h('button', { class: 'to-latest', id: 'to-latest', title: 'Jump to latest', 'aria-label': 'Jump to latest', onclick: () => transcriptEl.scrollTo({ top: transcriptEl.scrollHeight, behavior: 'smooth' }) }, svg(ICON.chevron))
   transcriptEl.addEventListener('scroll', syncLatest, { passive: true })
-  const wrap = h('div', { class: 'composer-wrap' }, down, goalBar(), todoBar(), composer(), statusLine())
+  const wrap = h('div', { class: 'composer-wrap' }, down, sshBar(), goalBar(), todoBar(), composer(), statusLine())
   queueMicrotask(() => { transcriptEl.scrollTop = transcriptEl.scrollHeight })
   return MODE === 'sidebar' ? [tabbar(), transcriptEl, wrap] : [transcriptEl, wrap]
 }
@@ -1119,7 +1141,7 @@ window.addEventListener('message', ({ data: m }) => {
       trackStream(m.tab, m.item, i >= 0 ? list[i].text?.length : 0)
       if (m.item.card && bgInfo(m.item.card) && m.tab === S.active && (i < 0 || list[i].card?.status !== m.item.card.status)) refreshJobs()
       if (i >= 0) list[i] = m.item; else list.push(m.item)
-      if (m.tab === S.active && S.view === 'chat') queueUpsert(m.item, () => { updateWorking(); if (m.item.card?.todo) refreshTodo() })
+      if (m.tab === S.active && S.view === 'chat') queueUpsert(m.item, () => { updateWorking(); if (m.item.card?.todo) refreshTodo(); if (m.item.card?.needsInput) refreshSshBar() })
       return
     }
     case 'files': if (S.menu === 'files' && m.query === S.fileQuery) { S.files = m.files; S.menuIndex = 0; refreshComposer() } return

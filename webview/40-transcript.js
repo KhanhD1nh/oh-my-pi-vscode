@@ -202,5 +202,5 @@ function turnSummary(list, i) {
     h('span', {}, `${tools.length} tools`),
     files.size ? h('span', {}, `${files.size} file${files.size > 1 ? 's' : ''} `, h('span', { class: 'plus' }, `+${add}`), ' ', h('span', { class: 'minus' }, `−${del}`)) : null,
     failed ? h('span', { class: 'minus' }, `${failed} failed`) : null,
-    start && end > start ? h('span', {}, took(end - start)) : null)
+    start && end - start >= 1000 ? h('span', {}, took(end - start)) : null)
 }
