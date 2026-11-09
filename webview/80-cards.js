@@ -94,26 +94,43 @@ function askEl(it) {
     h('div', { class: 'q-sub' }, status + ' · ' + n + ' question' + (n === 1 ? '' : 's'), done ? h('span', { class: 'q-chev' + (open ? ' open' : '') }, '⌃') : null))
   if (!open) return h('div', { class: 'q done' }, head)
   const submit = done ? null : h('button', { class: 'ask-submit', onclick: () => send({ type: 'answer', tab: S.active, itemId: it.id, action: 'accept', content: val }) }, 'Submit')
-  const check = () => { if (submit) submit.disabled = (it.schema.required ?? []).some(k => val[k] === undefined || val[k] === '' || (Array.isArray(val[k]) && !val[k].length)) && !props.some(([k]) => val[k + '__other']) }
+  // per question: "Other" picked (its text box shown); omp reads a non-empty <k>__other as the answer
+  const otherOn = {}
+  const answered = k => otherOn[k] ? !!String(val[k + '__other'] ?? '').trim() : !(val[k] === undefined || val[k] === '' || (Array.isArray(val[k]) && !val[k].length))
+  const check = () => { if (submit) submit.disabled = props.some(([k]) => (otherOn[k] || (it.schema.required ?? []).includes(k)) && !answered(k)) }
   const blocks = props.map(([k, p], qi) => {
     const o = opts(p)
     const chosen = done ? [c[k]].flat().filter(v => v !== undefined) : null
     const isRec = v => p.default != null && v === p.default && !/recommended/iu.test(String((o ?? []).find(x => x.v === v)?.t ?? ''))
-    let body
+    const ot = other(k)
+    let body, otherBox = null
     if (o) {
       const multi = p.type === 'array'
       if (multi && !done) val[k] ??= []
-      body = h('div', { class: 'q-opts', role: multi ? 'group' : 'radiogroup', 'aria-label': p.title || k }, o.map(x => {
-        const on = done ? chosen.includes(x.v) : multi ? val[k].includes(x.v) : val[k] === x.v
-        return h('label', { class: 'q-opt' + (on ? ' on' : '') + (done ? ' ro' : '') },
-          h('input', { type: multi ? 'checkbox' : 'radio', name: it.id + k, ...on ? { checked: true } : {}, ...done ? { disabled: true } : {},
-            onchange: e => {
-              if (multi) val[k] = e.target.checked ? [...val[k], x.v] : val[k].filter(v => v !== x.v); else val[k] = x.v
-              check()
-              e.target.closest('.q-opts').querySelectorAll('.q-opt').forEach(l => l.classList.toggle('on', l.querySelector('input').checked))
-            } }),
-          h('span', { class: 'q-opt-text' }, h('b', {}, x.t, isRec(x.v) ? ' (Recommended)' : null), x.d ? h('small', {}, x.d) : null))
+      const otherText = done && ot ? String(c[ot[0]] ?? '').trim() : ''
+      // the free-text box belongs to the "Other" choice: hidden until that choice is picked
+      const box = ot && !done ? h('input', { type: 'text', class: 'field q-other', hidden: true, placeholder: 'Type your own answer', 'aria-label': 'Other answer', oninput: e => { val[ot[0]] = e.target.value; check() } }) : null
+      const sync = group => group.querySelectorAll('.q-opt').forEach(l => l.classList.toggle('on', l.querySelector('input').checked))
+      const row = (x, on, pick) => h('label', { class: 'q-opt' + (on ? ' on' : '') + (done ? ' ro' : '') },
+        h('input', { type: multi ? 'checkbox' : 'radio', name: it.id + k, ...on ? { checked: true } : {}, ...done ? { disabled: true } : {}, onchange: e => { pick(e.target.checked); check(); sync(e.target.closest('.q-opts')) } }),
+        h('span', { class: 'q-opt-text' }, h('b', {}, x.t, isRec(x.v) ? ' (Recommended)' : null), x.d ? h('small', {}, x.d) : null))
+      const setOther = on => {
+        otherOn[k] = on
+        if (!box) return
+        box.hidden = !on
+        if (on) queueMicrotask(() => box.focus()); else { box.value = ''; delete val[ot[0]] }
+      }
+      const rows = o.map(x => row(x, done ? !otherText && chosen.includes(x.v) : multi ? val[k].includes(x.v) : val[k] === x.v, checked => {
+        if (multi) val[k] = checked ? [...val[k], x.v] : val[k].filter(v => v !== x.v)
+        else { val[k] = x.v; setOther(false) }
       }))
+      if (ot) rows.push(row({ v: '__other', t: 'Other', d: done && otherText ? otherText : null }, !!otherText, checked => {
+        // single choice: "Other" replaces the pick; multi: it adds to the picks
+        if (!multi) delete val[k]
+        setOther(multi ? checked : true)
+      }))
+      body = h('div', { class: 'q-opts', role: multi ? 'group' : 'radiogroup', 'aria-label': p.title || k }, rows)
+      otherBox = box
     } else if (p.type === 'boolean') {
       if (!done) val[k] ??= false
       const on = done ? !!c[k] : val[k]
@@ -121,9 +138,6 @@ function askEl(it) {
     } else {
       body = done ? h('div', { class: 'q-text-ans' }, String(c[k] ?? '—')) : h('textarea', { class: 'field ask-text', rows: 2, placeholder: 'Type your answer…', oninput: e => { val[k] = p.type === 'number' || p.type === 'integer' ? Number(e.target.value) : e.target.value; check() } })
     }
-    const ot = other(k)
-    const otherBox = !ot ? null : done ? (c[ot[0]] ? h('div', { class: 'q-text-ans' }, h('span', { class: 'muted' }, 'Other: '), String(c[ot[0]])) : null)
-      : h('input', { type: 'text', class: 'field q-other', placeholder: 'Other — type your own answer', oninput: e => { val[ot[0]] = e.target.value; check() } })
     return h('div', { class: 'q-block' },
       h('div', { class: 'q-question' }, n > 1 ? h('span', { class: 'ask-n' }, String(qi + 1)) : null, p.title || k),
       p.description && p.description !== p.title ? h('div', { class: 'ask-d' }, p.description) : null,

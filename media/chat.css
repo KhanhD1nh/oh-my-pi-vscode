@@ -925,3 +925,5 @@ body.vscode-high-contrast .to-latest { border-color: var(--vscode-contrastBorder
 .q:not(.done) .q-opt:hover .q-opt-text b { text-decoration: underline; text-underline-offset: 2px; }
 .q-other { width: 100%; }
 .q-text-ans { font-size: 0.95em; }
+.q-other[hidden] { display: none; }
+.q-other { margin-left: 24px; width: calc(100% - 24px); }
