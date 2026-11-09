@@ -1646,8 +1646,13 @@ document.addEventListener('drop', e => {
     if (f.type.startsWith('image/')) { const r = new FileReader(); r.onload = () => { S.images.push({ mimeType: f.type, data: String(r.result).split(',')[1], url: r.result }); refreshComposer() }; r.readAsDataURL(f) }
     else if (f.path) paths.push(f.path)
   }
-  const uris = (dt.getData('text/uri-list') || dt.getData('application/vnd.code.uri-list') || '').split(/\r?\n/u).filter(u => u && !u.startsWith('#'))
-  for (const u of uris) { try { const url = new URL(u); if (url.protocol === 'file:') paths.push(decodeURIComponent(url.pathname.replace(/^\/([A-Za-z]:)/u, '$1'))) } catch {} }
+  // Explorer gives text/uri-list; an editor tab gives VS Code's own lists (ResourceURLs is a JSON array)
+  let uris = (dt.getData('text/uri-list') || dt.getData('application/vnd.code.uri-list') || '').split(/\r?\n/u).filter(u => u && !u.startsWith('#'))
+  if (!uris.length) { try { uris = JSON.parse(dt.getData('ResourceURLs') || dt.getData('resourceurls') || '[]') } catch { uris = [] } }
+  // decode first: VS Code writes the drive colon as %3A (file:///d%3A/…)
+  for (const u of uris) { try { const url = new URL(u); if (url.protocol === 'file:') paths.push(decodeURIComponent(url.pathname).replace(/^\/([A-Za-z]:)/u, '$1')) } catch {} }
+  // last resort: a plain absolute path as text
+  if (!paths.length) { const t = (dt.getData('text/plain') || '').trim(); if (/^([A-Za-z]:[\\/]|\/)[^\n]+$/u.test(t)) paths.push(t) }
   if (paths.length) send({ type: 'mentionPaths', paths })
 })
 

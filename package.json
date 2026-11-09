@@ -2,7 +2,7 @@
   "name": "oh-my-pi",
   "displayName": "Oh My Pi",
   "description": "Chat with the omp coding agent inside VS Code: streaming replies, tool cards, diffs, model picker and every omp setting.",
-  "version": "0.34.1",
+  "version": "0.34.2",
   "publisher": "khanhd1nh",
   "license": "MIT",
   "repository": {
@@ -186,6 +186,13 @@
         {
           "command": "ohMyPi.send.workspaceProblems",
           "group": "3_more@2"
+        }
+      ],
+      "editor/title/context": [
+        {
+          "command": "ohMyPi.send.files",
+          "when": "resourceScheme == file",
+          "group": "ohMyPi@1"
         }
       ],
       "explorer/context": [
