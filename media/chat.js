@@ -1663,6 +1663,11 @@ document.addEventListener('drop', e => {
   // Explorer gives text/uri-list; an editor tab gives VS Code's own lists (ResourceURLs is a JSON array)
   let uris = (dt.getData('text/uri-list') || dt.getData('application/vnd.code.uri-list') || '').split(/\r?\n/u).filter(u => u && !u.startsWith('#'))
   if (!uris.length) { try { uris = JSON.parse(dt.getData('ResourceURLs') || dt.getData('resourceurls') || '[]') } catch { uris = [] } }
+  // an editor tab: CodeEditors = [{ resource: { external: 'file:///…' | scheme, path } }]
+  if (!uris.length) { try { for (const ed of JSON.parse(dt.getData('CodeEditors') || dt.getData('codeeditors') || '[]')) { const r = ed?.resource; if (typeof r?.external === 'string') uris.push(r.external); else if (r?.path) uris.push('file://' + (r.path.startsWith('/') ? '' : '/') + r.path) } } catch {} }
+  // CodeFiles = ["d:\\path\\file"] (plain paths)
+  if (!uris.length) { try { for (const f of JSON.parse(dt.getData('CodeFiles') || dt.getData('codefiles') || '[]')) if (typeof f === 'string') paths.push(f) } catch {} }
+  if (!uris.length && !paths.length) send({ type: 'log', line: `drop: nothing usable; types=${[...dt.types].join(',')}` })
   // decode first: VS Code writes the drive colon as %3A (file:///d%3A/…)
   for (const u of uris) { try { const url = new URL(u); if (url.protocol === 'file:') paths.push(decodeURIComponent(url.pathname).replace(/^\/([A-Za-z]:)/u, '$1')) } catch {} }
   // last resort: a plain absolute path as text

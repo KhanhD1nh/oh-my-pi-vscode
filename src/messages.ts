@@ -87,6 +87,7 @@ export async function handleMessage(p: ChatProvider, m: WebviewMessage, from: st
     case 'permit': p.tab(m.tab)?.session.choose(m.itemId, m.optionId); return
     case 'answer': p.tab(m.tab)?.session.answer(m.itemId, m.action, m.content); return
     case 'rewind': { const t = p.tab(m.tab); if (t) await revertEditsAfter(t.session.transcript.items, m.itemId); return }
+    case 'log': p.log(m.line); return
     case 'sshKeys': reply({ type: 'sshKeys', keys: await sshKeys() }); return
     case 'unlockKey': {
       const r = await unlockKey(m.key, m.passphrase, p.storage)

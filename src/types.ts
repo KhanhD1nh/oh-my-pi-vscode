@@ -159,6 +159,7 @@ export type WebviewMessage =
   | { type: 'setMode'; tab: string; value: string }
   | { type: 'autopilot'; tab: string; on: boolean }
   | { type: 'sshKeys' }
+  | { type: 'log'; line: string }
   | { type: 'unlockKey'; tab: string; key: string; passphrase: string }
   | { type: 'openFile'; path: string; line?: number }
   | { type: 'openDiff'; tab: string; toolId: string }

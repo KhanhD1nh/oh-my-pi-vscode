@@ -55,6 +55,9 @@ export class ChatProvider implements vscode.WebviewViewProvider {
 
   // ── lookups ──
 
+  /** Line in the OMP output channel (diagnostics from the webview). */
+  log(line: string): void { this.output.appendLine(line) }
+
   /** Folder for small helper files (the SSH askpass script). */
   get storage(): string { return this.context.globalStorageUri.fsPath }
 
