@@ -1559,7 +1559,9 @@ function renderJobPanel() {
           jobState(j.status), h('span', { class: 'jp-label' }, j.label), h('span', { class: 'jp-id' }, j.jobId),
           h('span', { class: 'desc' }, j.durationMs != null ? took(j.durationMs) : j.status === 'running' && j.at ? took(Date.now() - j.at) : '')))),
     sel ? h('div', { class: 'jp-out' },
-      h('div', { class: 'jp-out-head' }, jobState(sel.status), h('b', {}, sel.label), h('span', { class: 'muted' }, ` · ${sel.status}${sel.at ? ' · started ' + clock(sel.at) : ''}`)),
+      h('div', { class: 'jp-out-head' }, jobState(sel.status), h('b', {}, sel.label), h('span', { class: 'muted' }, ` · ${sel.status}${sel.at ? ' · started ' + clock(sel.at) : ''}${sel.durationMs != null ? ' · ' + took(sel.durationMs) : ''}`)),
+      sel.command ? h('div', { class: 'jp-cmd' }, h('div', { class: 'jp-k' }, 'Command', sel.cwd ? h('span', { class: 'jp-cwd', title: sel.cwd }, ` · in ${sel.cwd}`) : null), h('div', { class: 'codeblock' }, copyBtn(sel.command), h('pre', {}, sel.command))) : null,
+      h('div', { class: 'jp-k' }, 'Output'),
       sel.output ? h('div', { class: 'codeblock' }, copyBtn(sel.output), h('pre', {}, sel.output))
         : h('div', { class: 'muted ap-empty' }, sel.status === 'running' ? 'Still running — its output arrives when it finishes.' : 'No output.')) : null)
   if (old) old.replaceWith(panel); else { app.append(panel); panel.classList.add('enter'); queueMicrotask(() => panel.querySelector('.jp-row.on, .jp-row')?.focus()) }

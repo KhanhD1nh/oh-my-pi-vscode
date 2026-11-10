@@ -85,3 +85,15 @@ test('foldSession keeps your prompts for history search', () => {
   const s = foldSession([line('sửa chấm công'), line('kiểm tra quyền')])
   assert.ok(s.text?.includes('chấm công') && s.text.includes('kiểm tra quyền'))
 })
+
+test('foldJobs keeps the command and folder a job runs', async () => {
+  const { foldJobs } = await import('../src/stats.ts')
+  const lines = [
+    JSON.stringify({ type: 'message', timestamp: '2026-11-10T02:26:00Z', message: { role: 'assistant', content: [{ type: 'toolCall', id: 'c1', name: 'bash', arguments: { i: 'Chạy gói triển khai độc lập', command: 'pnpm build && node dist/server.js', cwd: 'vthh/vthh-be', async: true } }] } }),
+    JSON.stringify({ type: 'message', timestamp: '2026-11-10T02:26:01Z', message: { role: 'toolResult', toolCallId: 'c1', content: [{ type: 'text', text: 'Backgrounded as job bg_6.' }], details: { async: { jobId: 'bg_6', type: 'bash' } } } }),
+  ]
+  const [j] = foldJobs(lines)
+  assert.equal(j?.label, 'Chạy gói triển khai độc lập')
+  assert.equal(j?.command, 'pnpm build && node dist/server.js')
+  assert.equal(j?.cwd, 'vthh/vthh-be')
+})

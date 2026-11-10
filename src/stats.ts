@@ -234,7 +234,7 @@ export function foldConversation(lines: Iterable<string>, cap = 6000): { entries
 }
 
 /** A background job omp started in this session (bash `async`, or a subagent) and what came of it. */
-export interface JobInfo { jobId: string; type: string; label: string; status: 'running' | 'completed' | 'failed' | string; durationMs?: number; output?: string; at?: number }
+export interface JobInfo { jobId: string; type: string; label: string; status: 'running' | 'completed' | 'failed' | string; durationMs?: number; output?: string; at?: number; command?: string; cwd?: string }
 
 /** Background jobs of session `sessionId`, from omp's own delivery notices in the session file. */
 export async function sessionJobs(cwd: string, sessionId: string): Promise<JobInfo[]> {
@@ -259,21 +259,22 @@ const jobCache = new Map<string, { size: number; mtime: number; jobs: JobInfo[] 
 /** Pure fold: "Backgrounded as job bg_N" tool results start a job, "background job delivery" notices end it. */
 export function foldJobs(lines: Iterable<string>, cap = 20_000): JobInfo[] {
   const jobs = new Map<string, JobInfo>()
-  const commands = new Map<string, string>()
+  const commands = new Map<string, { label: string; command: string; cwd?: string }>()
   for (const line of lines) {
     if (line[0] !== '{' || !/Backgrounded as job|"async-result"|### bg_\S+ \[|"toolCall"/u.test(line)) continue
-    let e: { type?: string; customType?: string; timestamp?: string; content?: unknown; details?: { jobs?: { jobId?: string; type?: string; status?: string; label?: string; durationMs?: number }[]; async?: { jobId?: string; type?: string } }; message?: { role?: string; toolCallId?: string; content?: { type?: string; text?: string; id?: string; name?: string; arguments?: { command?: string; i?: string } }[]; details?: { async?: { jobId?: string; type?: string } } } }
+    let e: { type?: string; customType?: string; timestamp?: string; content?: unknown; details?: { jobs?: { jobId?: string; type?: string; status?: string; label?: string; durationMs?: number }[]; async?: { jobId?: string; type?: string } }; message?: { role?: string; toolCallId?: string; content?: { type?: string; text?: string; id?: string; name?: string; arguments?: { command?: string; i?: string; cwd?: string } }[]; details?: { async?: { jobId?: string; type?: string } } } }
     try { e = JSON.parse(line) } catch { continue }
     const at = e.timestamp ? Date.parse(e.timestamp) : undefined
     // remember each bash call's command, to label the job it starts
     if (e.message?.role === 'assistant') {
-      for (const c of e.message.content ?? []) if (c.type === 'toolCall' && c.id && c.name === 'bash' && c.arguments?.command) commands.set(c.id, c.arguments.i ?? c.arguments.command)
+      for (const c of e.message.content ?? []) if (c.type === 'toolCall' && c.id && c.name === 'bash' && c.arguments?.command) commands.set(c.id, { label: c.arguments.i ?? c.arguments.command, command: c.arguments.command.slice(0, 8000), ...c.arguments.cwd ? { cwd: c.arguments.cwd } : {} })
       continue
     }
     const started = e.message?.role === 'toolResult' ? e.message.details?.async : undefined
     if (started?.jobId) {
-      const label = (e.message?.toolCallId && commands.get(e.message.toolCallId)) || (e.message?.content ?? []).map(c => c.text ?? '').join(' ').replace(/Backgrounded as job[\s\S]*/u, '').trim() || started.jobId
-      jobs.set(started.jobId, { jobId: started.jobId, type: started.type ?? 'bash', label: label.slice(0, 160), status: 'running', ...at ? { at } : {} })
+      const call = e.message?.toolCallId ? commands.get(e.message.toolCallId) : undefined
+      const label = call?.label || (e.message?.content ?? []).map(c => c.text ?? '').join(' ').replace(/Backgrounded as job[\s\S]*/u, '').trim() || started.jobId
+      jobs.set(started.jobId, { jobId: started.jobId, type: started.type ?? 'bash', label: label.slice(0, 160), status: 'running', ...at ? { at } : {}, ...call ? { command: call.command, ...call.cwd ? { cwd: call.cwd } : {} } : {} })
       continue
     }
     // a job report the model asked for ("### bg_21 [bash] — failed … ``` output ```"): the only result for jobs
