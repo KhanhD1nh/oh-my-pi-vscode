@@ -754,6 +754,13 @@ function composer() {
     },
     oninput: () => { S.histAt = undefined; autosize(ta); updateInlineMenus(ta); syncAction() },
     onpaste: e => {
+      // a file copied in the Explorer (Ctrl+C) or a pasted absolute path becomes an @mention
+      const cd = e.clipboardData
+      const listed = (cd?.getData('code/file-list') || cd?.getData('text/uri-list') || '').split(/\r?\n/u).filter(u => /^file:/u.test(u))
+      const plain = (cd?.getData('text/plain') || '').trim()
+      const asPath = !listed.length && /^([A-Za-z]:[\\/]|\/)[^\n*?"<>|]+\.[\w-]+$/u.test(plain) ? [plain] : []
+      const paths = [...listed.map(u => { try { return decodeURIComponent(new URL(u).pathname).replace(/^\/([A-Za-z]:)/u, '$1') } catch { return '' } }).filter(Boolean), ...asPath]
+      if (paths.length) { e.preventDefault(); send({ type: 'mentionPaths', paths }); return }
       for (const f of e.clipboardData?.files ?? []) if (f.type.startsWith('image/')) {
         e.preventDefault()
         const r = new FileReader(); r.onload = () => { S.images.push({ mimeType: f.type, data: String(r.result).split(',')[1], url: r.result }); refreshComposer() }; r.readAsDataURL(f)
