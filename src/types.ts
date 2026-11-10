@@ -106,6 +106,12 @@ export interface TabState {
   id: string
   /** Autopilot on for this chat. */
   autopilot?: boolean
+  /** Read-only chat (writes and commands declined). */
+  readOnly?: boolean
+  /** omp's process for this chat exited; the next message restarts it. */
+  dead?: boolean
+  /** Cost of the running (or last) turn, USD. */
+  turnCost?: number
   title?: string
   busy: boolean
   queued: number
@@ -160,6 +166,9 @@ export type WebviewMessage =
   | { type: 'setThinking'; tab: string; value: string }
   | { type: 'setMode'; tab: string; value: string }
   | { type: 'autopilot'; tab: string; on: boolean }
+  | { type: 'readOnly'; tab: string; on: boolean }
+  | { type: 'restartOmp'; tab: string }
+  | { type: 'turnDiff'; tab: string; itemId: string }
   | { type: 'sshKeys' }
   | { type: 'log'; line: string }
   | { type: 'jobAction'; tab: string; jobId: string; action: 'peek' | 'kill' }

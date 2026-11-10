@@ -2,7 +2,7 @@
   "name": "oh-my-pi",
   "displayName": "Oh My Pi",
   "description": "Chat with the omp coding agent inside VS Code: streaming replies, tool cards, diffs, model picker and every omp setting.",
-  "version": "0.35.0",
+  "version": "0.36.0",
   "publisher": "khanhd1nh",
   "license": "MIT",
   "repository": {
@@ -285,6 +285,12 @@
           "default": 30,
           "minimum": 1,
           "description": "Longest time an SSH key unlocked from the chat stays in ssh-agent."
+        },
+        "ohMyPi.costWarn": {
+          "type": "number",
+          "default": 2,
+          "minimum": 0,
+          "description": "Warn when one message (with the autopilot/goal turns it sets off) has cost more than this many USD. 0 = never."
         },
         "ohMyPi.compact": {
           "type": "boolean",

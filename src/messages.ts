@@ -3,6 +3,7 @@ import * as vscode from 'vscode'
 import type { ChatProvider } from './chats.ts'
 import { agentConversation, agentSteps, sessionJobs } from './stats.ts'
 import { sshKeys, unlockKey } from './sshUnlock.ts'
+import { openTurnDiff } from './workspace.ts'
 import type { HostMessage, WebviewMessage } from './types.ts'
 import { exportChat, findFiles, mentionText, openDiff, openFile, revertEditsAfter } from './workspace.ts'
 
@@ -88,6 +89,9 @@ export async function handleMessage(p: ChatProvider, m: WebviewMessage, from: st
     case 'answer': p.tab(m.tab)?.session.answer(m.itemId, m.action, m.content); return
     case 'rewind': { const t = p.tab(m.tab); if (t) await revertEditsAfter(t.session.transcript.items, m.itemId); return }
     case 'log': p.log(m.line); return
+    case 'readOnly': { const t = p.tab(m.tab); if (t) { t.session.readOnly = m.on; if (t.session.modes.some(x => x.id === 'plan')) await t.session.setMode(m.on ? 'plan' : 'default').catch(() => {}); t.session.events_notice(m.on ? 'Read-only on — omp can read and search, but every write, delete and command is declined' : 'Read-only off'); p.refreshTab(t.session.id) } return }
+    case 'restartOmp': { const t = p.tab(m.tab); if (t) await p.restartOmp(t.cwd); return }
+    case 'turnDiff': { const t = p.tab(m.tab); if (t) await openTurnDiff(t.session.transcript.items, m.itemId, p.diffBefore); return }
     case 'jobAction': {
       const t = p.tab(m.tab); if (!t || !/^[\w.-]+$/u.test(m.jobId)) return
       if (m.action === 'kill') {

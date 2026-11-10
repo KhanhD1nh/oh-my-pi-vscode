@@ -55,6 +55,9 @@ export class ChatProvider implements vscode.WebviewViewProvider {
 
   // ── lookups ──
 
+  /** Restart omp for `cwd`: the next message in each tab reopens its session in a new process. */
+  async restartOmp(cwd: string): Promise<void> { await this.host(cwd).restart() }
+
   /** Line in the OMP output channel (diagnostics from the webview). */
   log(line: string): void { this.output.appendLine(line) }
 
@@ -106,6 +109,7 @@ export class ChatProvider implements vscode.WebviewViewProvider {
         setTimeout(() => { if (!s.busy && !s.queue.length) for (const [k, u] of this.unlocked) if (u.session === s.id) void this.relock(k, 'turn finished') }, 1500)
     }
     if (!was && s.busy) { this.predicting.get(s.id)?.abort(); this.postTab(s.id, { type: 'prediction', tab: s.id, text: '' }) }
+    this.checkCost(s)
     this.postTab(s.id, { type: 'tab', tab: this.tabState(s) })
     this.tickTitles()
     // Sidebar follows title changes (omp names a session after its first turn) and turn ends.
@@ -147,7 +151,7 @@ export class ChatProvider implements vscode.WebviewViewProvider {
     const t = this.tab(s.id)
     const branch = t ? branchOf(t.cwd) : undefined
     return {
-      id: s.id, autopilot: s.autopilot.enabled, busy: s.busy, queued: s.queue.filter(q => !q.goal).length, ...s.goal ? { goal: s.goal } : {}, thinkingLevels: s.thinkingLevels, modes: s.modes, commands: s.commands, usage: s.usage,
+      id: s.id, autopilot: s.autopilot.enabled, ...s.readOnly ? { readOnly: true } : {}, ...s.dead ? { dead: true } : {}, ...s.turnCost !== undefined ? { turnCost: s.turnCost } : {}, busy: s.busy, queued: s.queue.filter(q => !q.goal).length, ...s.goal ? { goal: s.goal } : {}, thinkingLevels: s.thinkingLevels, modes: s.modes, commands: s.commands, usage: s.usage,
       ...s.title ? { title: s.title } : {}, ...s.model ? { model: s.model } : {}, ...s.thinking ? { thinking: s.thinking } : {}, ...s.mode ? { mode: s.mode } : {},
       ...t?.unread ? { unread: true } : {},
       ...t ? { folder: t.cwd.replace(/\\/gu, '/').split('/').filter(Boolean).pop() ?? t.cwd, startedAt: t.startedAt } : {},
@@ -380,6 +384,17 @@ export class ChatProvider implements vscode.WebviewViewProvider {
   }
   /** VS Code is closing: no key unlocked from the chat survives it. */
   async relockAll(): Promise<void> { await Promise.all([...this.unlocked.keys()].map(k => this.relock(k, 'VS Code closed'))) }
+
+  private readonly costWarned = new Set<string>()
+  /** Warn once per message when what it set off costs more than ohMyPi.costWarn. */
+  private checkCost(s: OmpSession): void {
+    const limit = vscode.workspace.getConfiguration('ohMyPi').get<number>('costWarn', 2)
+    if (!limit || s.turnCost === undefined || s.turnCost < limit) { if ((s.turnCost ?? 0) < limit) this.costWarned.delete(s.id); return }
+    if (this.costWarned.has(s.id)) return
+    this.costWarned.add(s.id)
+    s.events_notice(`This request has cost $${s.turnCost.toFixed(2)} so far (warning at $${limit}) — stop it if that is more than you meant to spend`)
+    void vscode.window.showWarningMessage(`OMP: "${s.title ?? 'chat'}" has cost $${s.turnCost.toFixed(2)} on your last message.`, 'Stop it', 'Show').then(a => { if (a === 'Stop it') s.cancel(); if (a) this.tab(s.id)?.panel.reveal() })
+  }
 
   private readonly predicting = new Map<string, AbortController>()
   /** After a turn: ask a small model for your likely next message (setting ohMyPi.predictions; one extra billed call). */

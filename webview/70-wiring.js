@@ -54,7 +54,7 @@ window.addEventListener('message', ({ data: m }) => {
       if (!m.tab.busy && was.busy && m.tab.id === S.active && S.view === 'chat') { const t = transcriptEl, atEnd = t && t.scrollHeight - t.scrollTop - t.clientHeight < 80; render(); if (atEnd && transcriptEl) transcriptEl.scrollTop = transcriptEl.scrollHeight }
       if (!m.tab.busy && was.busy && m.tab.id === S.active) { refreshJobs(); if (S.menu === 'jobs') S.menu = null }
       if (m.tab.busy && !was.busy) { const st = (STAT[m.tab.id] ??= { chars: 0, total: 0, t0: 0, last: 0 }); st.chars = 0; st.t0 = 0 }
-      if (m.tab.id === S.active) { refreshStatus(); refreshGoal() }
+      if (m.tab.id === S.active) { refreshStatus(); refreshGoal(); refreshDeadBar() }
       if (S.view !== 'chat') return
       // Tab strip (spinner / unread / title) always; composer and spinner only for the active tab.
       const strip = document.querySelector('.tabbar')

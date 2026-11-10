@@ -18,6 +18,7 @@ function userActions(it) {
     h('button', { class: 'menu-item', title: 'Undo file edits omp made after this message', onclick: () => pick({ type: 'rewind', tab: S.active, itemId: it.id }) }, 'Rewind code to here'),
     h('button', { class: 'menu-item', title: 'Both: undo the file edits and go back to this message', onclick: () => pick({ type: 'editFrom', tab: S.active, itemId: it.id, rewindCode: true }) }, 'Fork conversation and rewind code'),
     h('div', { class: 'menu-sep' }),
+    h('button', { class: 'menu-item', onclick: () => { S.userMenu = null; togglePin(it.id); upsertNode(it) } }, isPinned(it.id) ? 'Unpin' : 'Pin to top'),
     h('button', { class: 'menu-item', title: 'Copy the whole chat so far into a new tab', onclick: () => pick({ type: 'fork', tab: S.active }) }, 'Duplicate chat in new tab')) : null)
 }
 document.addEventListener('click', e => { if (S.userMenu && !e.target.closest('.ua')) { const it = items().find(x => x.id === S.userMenu); S.userMenu = null; if (it) upsertNode(it) } })

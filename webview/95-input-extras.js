@@ -42,11 +42,30 @@ function findBar() {
 function openFind() { if (S.view !== 'chat' || !transcriptEl) return; if (!document.getElementById('findbar')) transcriptEl.before(findBar()); const i = document.getElementById('find-input'); i.focus(); i.select(); runFind() }
 function closeFind() { document.getElementById('findbar')?.remove(); S.find = ''; clearMarks(); document.getElementById('input')?.focus() }
 function clearMarks() { for (const m of transcriptEl?.querySelectorAll('mark.hit') ?? []) m.replaceWith(document.createTextNode(m.textContent)); transcriptEl?.normalize() }
+/** Text of an item as find sees it (prompt, reply, tool title / command / output). */
+const findText = it => it.type === 'tool' ? [it.card.title, it.card.input, it.card.output].filter(Boolean).join('\n') : it.text ?? it.message ?? ''
+/** Make every item that matches `q` rendered: widen the window and unfold groups that hold a match. @returns true if it re-rendered. */
+function revealMatches(q) {
+  const list = items(); let changed = false
+  const hitIdx = list.map((it, i) => findText(it).toLowerCase().includes(q) ? i : -1).filter(i => i >= 0)
+  if (!hitIdx.length) return false
+  const need = list.length - hitIdx[0]
+  if (need > (S.window[S.active] ?? 200)) { S.window[S.active] = need; changed = true }
+  for (const i of hitIdx) {
+    // the group key is the first item of its run: walk back over groupable items
+    let j = i; while (j > 0 && groupable(list[j - 1])) j--
+    const key = 'g:' + list[j].id
+    if (groupable(list[i]) && !S.open.has(key)) { S.open.add(key); changed = true }
+  }
+  if (changed) { const bar = document.getElementById('findbar'); const v = document.getElementById('find-input')?.value; render(); if (bar && !document.getElementById('findbar')) { transcriptEl.before(findBar()); const i = document.getElementById('find-input'); if (i) { i.value = v ?? ''; i.focus() } } }
+  return changed
+}
 function runFind() {
   clearMarks()
   const q = (S.find ?? '').toLowerCase(), count = document.getElementById('find-count')
   if (!q || !transcriptEl) { if (count) count.textContent = ''; return }
-  // Find covers what is rendered; older items load when you click "Show earlier".
+  if (revealMatches(q)) return runFind()
+  // revealMatches() has made every matching item rendered (older ones and folded groups included)
   const hits = []
   const walker = document.createTreeWalker(transcriptEl, NodeFilter.SHOW_TEXT, { acceptNode: n => n.parentElement?.closest('button, .copy') ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT })
   const texts = []; while (walker.nextNode()) texts.push(walker.currentNode)

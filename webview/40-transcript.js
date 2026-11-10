@@ -41,10 +41,11 @@ function replyFoot(it) {
   const span = it.since && end ? end - it.since : null
   const copy = h('button', { class: 'foot-btn copy-reply', title: 'Copy reply (Markdown)', 'aria-label': 'Copy reply' }, svg(ICON.copy))
   copy.dataset.text = it.text
+  const pin = h('button', { class: `foot-btn pin-btn${isPinned(it.id) ? ' on' : ''}`, title: isPinned(it.id) ? 'Unpin' : 'Pin to top', 'aria-label': 'Pin', onclick: () => { togglePin(it.id); upsertNode(it) } }, svg(ICON.pin))
   return h('div', { class: 'reply-foot' },
     end ? h('span', { class: 'foot-time', title: new Date(end).toLocaleString() }, clock(end)) : null,
     span && span >= 1000 ? h('span', { class: 'foot-took', title: 'From your message to the end of this reply' }, took(span)) : null,
-    copy)
+    copy, pin)
 }
 /**
  * A card rebuilt while you read it must not jump: carry every scrolled box (subagent step lists, long
@@ -200,7 +201,30 @@ function turnSummary(list, i) {
   const start = list[i].at, end = Math.max(0, ...turn.map(x => x.end ?? x.card?.endedAt ?? x.at ?? 0))
   return h('div', { class: 'turn-sum', title: [...files.keys()].join('\n') },
     h('span', {}, `${tools.length} tools`),
-    files.size ? h('span', {}, `${files.size} file${files.size > 1 ? 's' : ''} `, h('span', { class: 'plus' }, `+${add}`), ' ', h('span', { class: 'minus' }, `−${del}`)) : null,
+    files.size ? h('button', { class: 'turn-diff', title: 'Open every file this turn changed in the diff viewer', onclick: () => send({ type: 'turnDiff', tab: S.active, itemId: list[i].id }) }, `${files.size} file${files.size > 1 ? 's' : ''} `, h('span', { class: 'plus' }, `+${add}`), ' ', h('span', { class: 'minus' }, `−${del}`)) : null,
     failed ? h('span', { class: 'minus' }, `${failed} failed`) : null,
     start && end - start >= 1000 ? h('span', {}, took(end - start)) : null)
 }
+
+// ───────────── pinned messages ─────────────
+const pinsOf = () => S.active ? ((S.pins ??= {})[S.active] ??= []) : []
+const isPinned = id => pinsOf().includes(id)
+function togglePin(id) {
+  const p = pinsOf(), i = p.indexOf(id)
+  if (i >= 0) p.splice(i, 1); else p.push(id)
+  vscode.setState?.({ ...vscode.getState?.() ?? {}, pins: S.pins })
+  refreshPins()
+}
+function pinBar() {
+  const list = items(), p = pinsOf().map(id => list.find(x => x.id === id)).filter(Boolean)
+  if (!p.length) return null
+  const open = !!S.pinsOpen
+  const first = t => String(t ?? '').replace(/\s+/gu, ' ').trim()
+  return h('div', { class: 'pin-bar', id: 'pin-bar' },
+    h('button', { class: 'pin-head', 'aria-expanded': open ? 'true' : 'false', onclick: () => { S.pinsOpen = !open; refreshPins() } }, svg(ICON.pin), h('span', {}, `${p.length} pinned`), h('span', { class: 'pin-first' }, first(p.at(-1).text).slice(0, 90))),
+    open ? h('div', { class: 'pin-list' }, p.map(it => h('div', { class: 'pin-row' },
+      h('button', { class: 'pin-go', title: 'Jump to it', onclick: () => { const n = nodes.get(it.id); if (!n) { S.window[S.active] = items().length; render() } nodes.get(it.id)?.scrollIntoView({ block: 'start', behavior: 'smooth' }) } },
+        h('span', { class: 'pin-who' }, it.type === 'user' ? 'You' : 'omp'), first(it.text).slice(0, 160)),
+      h('button', { class: 'icon-btn', title: 'Unpin', onclick: () => { togglePin(it.id); const n = nodes.get(it.id); if (n) upsertNode(it) } }, '×')))) : null)
+}
+function refreshPins() { const el = document.getElementById('pin-bar'), fresh = pinBar(); if (el) { if (fresh) el.replaceWith(fresh); else el.remove() } else if (fresh) transcriptEl?.before(fresh) }

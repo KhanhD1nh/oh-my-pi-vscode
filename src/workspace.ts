@@ -36,6 +36,22 @@ export async function openDiff(card: ToolCard | undefined, toolId: string, diffB
   await vscode.commands.executeCommand('vscode.diff', before, file, `${vscode.workspace.asRelativePath(file)} (Oh My Pi)`)
 }
 
+/** Open one diff per file changed between prompt `itemId` and the next prompt (first old text vs the file now). */
+export async function openTurnDiff(items: ChatItem[], itemId: string, diffBefore: Map<string, string>): Promise<void> {
+  const from = items.findIndex(i => i.id === itemId)
+  if (from < 0) return
+  let to = items.findIndex((i, n) => n > from && i.type === 'user'); if (to < 0) to = items.length
+  const first = new Map<string, { toolId: string; old: string }>()
+  for (const it of items.slice(from + 1, to)) if (it.type === 'tool' && it.card.diff && !first.has(it.card.diff.path)) first.set(it.card.diff.path, { toolId: it.card.id, old: it.card.diff.oldText })
+  if (!first.size) { void vscode.window.showInformationMessage('OMP: this turn changed no files.'); return }
+  for (const [path, { toolId, old }] of first) {
+    diffBefore.set(toolId, old)
+    const file = vscode.Uri.file(path)
+    const before = vscode.Uri.from({ scheme: DIFF_SCHEME, path: `/${toolId}/${file.path.split('/').pop() ?? 'file'}` })
+    await vscode.commands.executeCommand('vscode.diff', before, file, `${vscode.workspace.asRelativePath(file)} (turn, Oh My Pi)`, { preview: false })
+  }
+}
+
 /**
  * Undo file edits omp made after the user message `itemId`, newest first, by reversing each recorded diff.
  * ponytail: only edits seen as diffs are reverted (not bash side effects); a hunk that no longer matches is skipped and reported.

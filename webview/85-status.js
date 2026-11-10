@@ -30,6 +30,7 @@ function statusLine() {
     t.stats || s.total ? seg('out', 'upArrow', t.stats && !t.busy ? fmtTok(t.stats.output) : fmtTok((t.stats?.output ?? 0) + Math.round(s.chars / 4)), 'Output tokens (omp session' + (t.busy ? ' + streaming estimate)' : ')')) : null,
     t.stats?.cacheRead ? seg('cache', 'db', fmtTok(t.stats.cacheRead), `Cache read${t.stats.input + t.stats.cacheRead ? ` · ${(t.stats.cacheRead / (t.stats.input + t.stats.cacheRead) * 100).toFixed(0)}% hit` : ''}`) : null,
     seg('rate', 'bolt', rate ? `${rate} tok/s` : t.stats?.apiMs ? `${(t.stats.output / (t.stats.apiMs / 1000)).toFixed(1)} tok/s` : '', rate ? 'Output speed now (estimated)' : 'Average model speed (omp session)'),
+    t.turnCost ? seg('turn-cost', '', '$' + t.turnCost.toFixed(t.turnCost < 1 ? 3 : 2) + ' this request', 'Cost of your last message, including autopilot and goal turns it set off') : null,
     seg('cost', '', (u.cost ?? t.stats?.cost) ? '$' + (u.cost ?? t.stats.cost).toFixed((u.cost ?? t.stats.cost) < 1 ? 3 : 2) : '', 'Session cost (omp)'))
 }
 /** Rebuild the status line only when what it shows changed (it is asked every second). */
@@ -212,3 +213,11 @@ document.addEventListener('keydown', e => {
   if (document.getElementById('agent-panel')) { e.preventDefault(); e.stopPropagation(); closeAgent() }
   else if (document.getElementById('job-panel')) { e.preventDefault(); e.stopPropagation(); closeJobs() }
 }, true)
+
+// ───────────── omp stopped ─────────────
+function deadBar() {
+  if (!tab().dead) return null
+  return h('div', { class: 'dead-bar', id: 'dead-bar', role: 'alert' }, h('span', {}, h('b', {}, 'omp stopped.'), ' Its process exited; your chat is kept.'),
+    h('button', { class: 'need-btn primary', onclick: () => send({ type: 'restartOmp', tab: S.active }) }, 'Restart omp'))
+}
+function refreshDeadBar() { const el = document.getElementById('dead-bar'), fresh = deadBar(); if (el) { if (fresh) el.replaceWith(fresh); else el.remove() } else if (fresh) document.querySelector('.composer-wrap')?.prepend(fresh) }

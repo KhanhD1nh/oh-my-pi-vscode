@@ -71,6 +71,7 @@ export class OmpSession {
       case 'usage_update': {
         const cost = (update.cost as { amount?: number } | undefined)?.amount
         this.usage = { ...typeof update.used === 'number' ? { used: update.used } : {}, ...typeof update.size === 'number' ? { size: update.size } : {}, ...typeof cost === 'number' ? { cost } : {} }
+        if (typeof cost === 'number' && this.turnStartCost !== undefined) this.turnCost = Math.max(0, cost - this.turnStartCost)
         this.events.state(this)
         return
       }
@@ -113,6 +114,8 @@ export class OmpSession {
    */
   prompt(text: string, images: { mimeType: string; data: string }[] = []): void {
     this.autopilot.continues = 0
+    this.turnStartCost = this.usage.cost ?? 0; this.turnCost = 0
+    this.readOnlyTold = false
     if (this.busy && this.host.steering) { void this.steer(text, images); return }
     this.queue.push({ text, images })
     this.events.state(this)
@@ -202,6 +205,13 @@ export class OmpSession {
    * A bash call failed for want of an unlocked SSH key: tell the running turn to wait for you instead of
    * reporting failure. The unlock box sends "key loaded" into the same turn, which ends that wait.
    */
+  /** Read-only chat: the extension declines every write, delete, move and command. */
+  readOnly = false
+  /** omp was told this turn that nothing will be approved. */
+  readOnlyTold = false
+  /** @internal A tool was declined because the chat is read-only. */
+  denied(title: string): void { this.events.item(this, this.transcript.notice(`Read-only chat — declined: ${title}`)) }
+
   /** Set by the host: keys currently in ssh-agent (to tell a locked key from a refused one). */
   agentKeys: () => Promise<string[]> = async () => []
   private holdForKey(item: ChatItem): void {
@@ -331,6 +341,17 @@ export class OmpSession {
   }
 
   ask(message: string, schema: AskSchema): Promise<{ action: 'accept' | 'decline' | 'cancel'; content?: Record<string, AskValue> }> {
+    // read-only chat: plan mode keeps omp from writing until a plan is approved, so never approve one
+    if (this.readOnly && /^Approve plan "/u.test(message)) {
+      this.events.item(this, this.transcript.notice('Read-only chat — plan not approved, omp stays read-only'))
+      // tell the turn why, or it re-submits the plan in a loop
+      this.readOnlyTold = true
+      if (this.host.steering) void this.host.rpc().request('_session/steering', { sessionId: this.id, prompt: [{ type: 'text', text: 'This chat is read-only: no plan will be approved and nothing may be written or run. Do not propose again. Answer from what you can read, say what you would change, and end your turn.' }] }).catch(() => {})
+      return Promise.resolve({ action: 'decline' })
+    }
+    // read-only uses omp's plan mode, which makes the model end every turn with an ask; once omp has been told
+    // it is read-only, decline those follow-up asks so the turn ends instead of waiting on you
+    if (this.readOnly && this.readOnlyTold) return Promise.resolve({ action: 'decline' })
     const item = this.transcript.ask(message, schema)
     if (this.waitingForKey && isKeyQuestion(message, schema)) { this.keyAsk = item.id; if (item.type === 'ask') item.hold = 'ssh' }
     this.events.item(this, item)
@@ -374,8 +395,14 @@ export class OmpSession {
     this.events.state(this)
   }
 
+  /** Session cost when your last message started, and what that work has cost since (USD). */
+  turnStartCost: number | undefined
+  turnCost: number | undefined
+  /** omp's process exited; cleared when it starts again. */
+  dead = false
   /** @internal Mark the session dead after the omp process exits. */
   fail(reason: string): void {
+    this.dead = true
     this.queue = []
     if (this.busy) { this.busy = false; this.events.item(this, this.transcript.error(reason)) }
     this.events.state(this)
@@ -388,6 +415,19 @@ export class OmpHost {
   private client: Rpc | undefined
   private starting: Promise<void> | undefined
   readonly sessions = new Map<string, OmpSession>()
+  /** Kill omp (if it is still running) so the next message starts a fresh process. */
+  async restart(): Promise<void> {
+    const child = this.child
+    if (child) {
+      const gone = new Promise<void>(r => child.once('exit', () => r()))
+      try { child.kill() } catch { /* already gone */ }
+      await Promise.race([gone, new Promise(r => setTimeout(r, 5000))])
+    }
+    // start omp again and reopen every session now, so the tab works before you type
+    await this.ensure()
+    for (const s of this.sessions.values()) await this.ready(s).catch(() => {})
+  }
+
   /** omp accepts `_session/steering` (messages into a running turn). */
   steering = false
 
@@ -410,6 +450,7 @@ export class OmpHost {
     const exe = await this.command()
     const child = spawn(exe, ['acp'], { cwd: this.cwd(), env: ompEnv(), stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true })
     this.child = child
+    for (const s of this.sessions.values()) if (s.dead) { s.dead = false; this.events.state(s) }
     child.stderr?.on('data', (d: Buffer) => { this.events.log(String(d).trimEnd()) })
     child.once('exit', (code) => {
       this.events.log(`omp exited (${String(code)})`)
@@ -425,7 +466,15 @@ export class OmpHost {
       })
       .onRequest(methods.client.session.requestPermission, async ({ params }) => {
         const title = String((params.toolCall as { title?: unknown }).title ?? 'Run tool')
-        const chosen = await this.events.permission(this.sessions.get(params.sessionId), title, params.options.map(o => ({ optionId: o.optionId, name: o.name, kind: o.kind })))
+        const s = this.sessions.get(params.sessionId)
+        const kind = String((params.toolCall as { kind?: unknown }).kind ?? '')
+        // read-only chat: anything that changes files or runs a command is declined without asking you
+        if (s?.readOnly && /^(edit|delete|move|execute)$/u.test(kind)) {
+          s.denied(title)
+          const reject = params.options.find(o => o.kind === 'reject_once') ?? params.options.find(o => o.kind?.startsWith('reject'))
+          return reject ? { outcome: { outcome: 'selected' as const, optionId: reject.optionId } } : { outcome: { outcome: 'cancelled' as const } }
+        }
+        const chosen = await this.events.permission(s, title, params.options.map(o => ({ optionId: o.optionId, name: o.name, kind: o.kind })))
         return chosen === undefined ? { outcome: { outcome: 'cancelled' as const } } : { outcome: { outcome: 'selected' as const, optionId: chosen } }
       })
     app.onRequest(methods.client.elicitation.create, async ({ params }) => {

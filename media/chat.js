@@ -19,6 +19,7 @@ const h = (tag, props = {}, ...kids) => {
 const svg = d => { const s = document.createElementNS('http://www.w3.org/2000/svg', 'svg'); s.setAttribute('viewBox', '0 0 16 16'); s.setAttribute('fill', 'none'); s.setAttribute('stroke', 'currentColor'); s.setAttribute('stroke-width', '1.5'); s.setAttribute('stroke-linecap', 'round'); s.setAttribute('stroke-linejoin', 'round'); s.innerHTML = d; return s }
 const ICON = {
   clock: '<circle cx="8" cy="8" r="5.8"/><path d="M8 4.8V8l2.2 1.4"/>',
+  pin: '<path d="M6 2h4l-.6 4 2.6 2.4H4L6.6 6z"/><path d="M8 8.4V14"/>',
   folder: '<path d="M2 4.5A1.5 1.5 0 0 1 3.5 3h2.6l1.5 1.6h4.9A1.5 1.5 0 0 1 14 6.1v5.4a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 2 11.5z"/>',
   branch: '<circle cx="4.5" cy="3.5" r="1.5"/><circle cx="4.5" cy="12.5" r="1.5"/><circle cx="11.5" cy="5.5" r="1.5"/><path d="M4.5 5v6M11.5 7c0 2.5-3 2.5-7 4"/>',
   down: '<path d="M8 3v10M4 9l4 4 4-4"/>', upArrow: '<path d="M8 13V3M4 7l4-4 4 4"/>',
@@ -372,7 +373,7 @@ function toolEl(c, key) {
 // ───────────── state ─────────────
 /** 'panel' = one chat in an editor tab; 'sidebar' = history + settings. */
 const MODE = document.body.dataset.mode ?? 'panel'
-if (document.body.dataset.session) vscode.setState?.({ sessionId: decodeURIComponent(document.body.dataset.session), cwd: decodeURIComponent(document.body.dataset.cwd ?? '') })
+if (document.body.dataset.session) vscode.setState?.({ ...vscode.getState?.() ?? {}, sessionId: decodeURIComponent(document.body.dataset.session), cwd: decodeURIComponent(document.body.dataset.cwd ?? '') })
 const S = {
   view: MODE === 'sidebar' ? 'history' : 'chat', tabs: [], active: undefined, models: [], cwd: '', transcripts: {},
   sessions: [], settings: { status: 'idle', settings: [], models: [], failed: {} },
@@ -425,10 +426,11 @@ function replyFoot(it) {
   const span = it.since && end ? end - it.since : null
   const copy = h('button', { class: 'foot-btn copy-reply', title: 'Copy reply (Markdown)', 'aria-label': 'Copy reply' }, svg(ICON.copy))
   copy.dataset.text = it.text
+  const pin = h('button', { class: `foot-btn pin-btn${isPinned(it.id) ? ' on' : ''}`, title: isPinned(it.id) ? 'Unpin' : 'Pin to top', 'aria-label': 'Pin', onclick: () => { togglePin(it.id); upsertNode(it) } }, svg(ICON.pin))
   return h('div', { class: 'reply-foot' },
     end ? h('span', { class: 'foot-time', title: new Date(end).toLocaleString() }, clock(end)) : null,
     span && span >= 1000 ? h('span', { class: 'foot-took', title: 'From your message to the end of this reply' }, took(span)) : null,
-    copy)
+    copy, pin)
 }
 /**
  * A card rebuilt while you read it must not jump: carry every scrolled box (subagent step lists, long
@@ -584,10 +586,33 @@ function turnSummary(list, i) {
   const start = list[i].at, end = Math.max(0, ...turn.map(x => x.end ?? x.card?.endedAt ?? x.at ?? 0))
   return h('div', { class: 'turn-sum', title: [...files.keys()].join('\n') },
     h('span', {}, `${tools.length} tools`),
-    files.size ? h('span', {}, `${files.size} file${files.size > 1 ? 's' : ''} `, h('span', { class: 'plus' }, `+${add}`), ' ', h('span', { class: 'minus' }, `−${del}`)) : null,
+    files.size ? h('button', { class: 'turn-diff', title: 'Open every file this turn changed in the diff viewer', onclick: () => send({ type: 'turnDiff', tab: S.active, itemId: list[i].id }) }, `${files.size} file${files.size > 1 ? 's' : ''} `, h('span', { class: 'plus' }, `+${add}`), ' ', h('span', { class: 'minus' }, `−${del}`)) : null,
     failed ? h('span', { class: 'minus' }, `${failed} failed`) : null,
     start && end - start >= 1000 ? h('span', {}, took(end - start)) : null)
 }
+
+// ───────────── pinned messages ─────────────
+const pinsOf = () => S.active ? ((S.pins ??= {})[S.active] ??= []) : []
+const isPinned = id => pinsOf().includes(id)
+function togglePin(id) {
+  const p = pinsOf(), i = p.indexOf(id)
+  if (i >= 0) p.splice(i, 1); else p.push(id)
+  vscode.setState?.({ ...vscode.getState?.() ?? {}, pins: S.pins })
+  refreshPins()
+}
+function pinBar() {
+  const list = items(), p = pinsOf().map(id => list.find(x => x.id === id)).filter(Boolean)
+  if (!p.length) return null
+  const open = !!S.pinsOpen
+  const first = t => String(t ?? '').replace(/\s+/gu, ' ').trim()
+  return h('div', { class: 'pin-bar', id: 'pin-bar' },
+    h('button', { class: 'pin-head', 'aria-expanded': open ? 'true' : 'false', onclick: () => { S.pinsOpen = !open; refreshPins() } }, svg(ICON.pin), h('span', {}, `${p.length} pinned`), h('span', { class: 'pin-first' }, first(p.at(-1).text).slice(0, 90))),
+    open ? h('div', { class: 'pin-list' }, p.map(it => h('div', { class: 'pin-row' },
+      h('button', { class: 'pin-go', title: 'Jump to it', onclick: () => { const n = nodes.get(it.id); if (!n) { S.window[S.active] = items().length; render() } nodes.get(it.id)?.scrollIntoView({ block: 'start', behavior: 'smooth' }) } },
+        h('span', { class: 'pin-who' }, it.type === 'user' ? 'You' : 'omp'), first(it.text).slice(0, 160)),
+      h('button', { class: 'icon-btn', title: 'Unpin', onclick: () => { togglePin(it.id); const n = nodes.get(it.id); if (n) upsertNode(it) } }, '×')))) : null)
+}
+function refreshPins() { const el = document.getElementById('pin-bar'), fresh = pinBar(); if (el) { if (fresh) el.replaceWith(fresh); else el.remove() } else if (fresh) transcriptEl?.before(fresh) }
 
 // Chat view, composer, menus (model, mode, add, slash, files), history / sidebar.
 // ───────────── views ─────────────
@@ -649,9 +674,11 @@ function chatView() {
   renderWorking()
   const down = h('button', { class: 'to-latest', id: 'to-latest', title: 'Jump to latest', 'aria-label': 'Jump to latest', onclick: () => transcriptEl.scrollTo({ top: transcriptEl.scrollHeight, behavior: 'smooth' }) }, svg(ICON.chevron))
   transcriptEl.addEventListener('scroll', syncLatest, { passive: true })
-  const wrap = h('div', { class: 'composer-wrap' }, down, sshBar(), goalBar(), todoBar(), composer(), statusLine())
+  const wrap = h('div', { class: 'composer-wrap' }, down, deadBar(), sshBar(), goalBar(), todoBar(), composer(), statusLine())
   queueMicrotask(() => { transcriptEl.scrollTop = transcriptEl.scrollHeight })
-  return MODE === 'sidebar' ? [tabbar(), transcriptEl, wrap] : [transcriptEl, wrap]
+  S.pins ??= vscode.getState?.()?.pins ?? {}
+  const pins = pinBar()
+  return MODE === 'sidebar' ? [tabbar(), pins, transcriptEl, wrap].filter(Boolean) : [pins, transcriptEl, wrap].filter(Boolean)
 }
 
 function modelName(sel) { return S.models.find(m => m.selector === sel)?.name ?? (sel ? sel.split('/').pop() : 'Model') }
@@ -746,7 +773,7 @@ function composer() {
       false && pct !== null ? h('span', { class: 'ctx', title: `${t.usage.used} / ${t.usage.size} tokens${t.usage.cost ? ` · $${t.usage.cost.toFixed(4)}` : ''}` }, `${pct}%`) : null,
       bgChip(),
       h('span', { class: 'grow' }),
-      h('button', { class: `chip-btn${S.menu === 'mode' ? ' open' : ''}${plan ? ' plan' : ''}`, title: 'Mode (Shift+Tab)', onclick: () => openMenu('mode') }, svg(plan ? MI.plan : ap?.icon ?? MI.bolt), h('span', { class: 'label' }, plan ? 'Plan' : ap?.name ?? 'Mode')),
+      h('button', { class: `chip-btn${S.menu === 'mode' ? ' open' : ''}${plan ? ' plan' : ''}`, title: 'Mode (Shift+Tab)', onclick: () => openMenu('mode') }, svg(plan ? MI.plan : ap?.icon ?? MI.bolt), h('span', { class: 'label' }, plan ? 'Plan' : ap?.name ?? 'Mode'), t.readOnly ? h('span', { class: 'ro-badge', title: 'Read-only chat' }, 'read-only') : null),
       h('button', { id: 'action', class: 'send', onclick: () => { const x = document.getElementById('input'); if (tab().busy && !x.value.trim() && !S.images.length) send({ type: 'cancel', tab: S.active }); else submit() } }, svg(ICON.up))),
     menuEl())
   const menu = box.querySelector('.menu')
@@ -825,6 +852,7 @@ function menuEl() {
       APPROVAL.map(x => row(!plan && x.id === S.approval, x.icon, x.name, x.desc, () => { setApproval(x.id); closeMenu() })),
       t.modes.some(m => m.id === 'plan') ? row(plan, MI.plan, 'Plan', 'Explores the code and presents a plan before editing', () => { send({ type: 'setMode', tab: S.active, value: plan ? 'default' : 'plan' }); closeMenu() }) : null,
       h('div', { class: 'menu-sep' }),
+      row(!!t.readOnly, MI.shield, 'Read-only', 'omp reads and searches; every write, delete and command is declined', () => { send({ type: 'readOnly', tab: S.active, on: !t.readOnly }); t.readOnly = !t.readOnly; closeMenu() }),
       row(t.autopilot !== false, MI.bolt, 'Autopilot', 'Keeps going on its own: continues unfinished todo lists and breaks waits that never return', () => { send({ type: 'autopilot', tab: S.active, on: t.autopilot === false }); t.autopilot = t.autopilot === false; closeMenu() }),
       lv.length ? [h('div', { class: 'menu-sep' }), h('div', { class: 'effort' }, svg(ICON.brain), h('span', {}, `Effort (${cap(t.thinking ?? 'auto')})`), h('span', { class: 'grow' }),
         h('span', { class: 'dots' }, lv.map((l, i) => h('button', { class: `dot${i <= cur ? ' on' : ''}${i === cur ? ' cur' : ''}`, title: cap(l), onclick: e => { e.stopPropagation(); send({ type: 'setThinking', tab: S.active, value: l }); t.thinking = l; refreshComposer() } }))))] : null)
@@ -1122,7 +1150,7 @@ window.addEventListener('message', ({ data: m }) => {
       if (!m.tab.busy && was.busy && m.tab.id === S.active && S.view === 'chat') { const t = transcriptEl, atEnd = t && t.scrollHeight - t.scrollTop - t.clientHeight < 80; render(); if (atEnd && transcriptEl) transcriptEl.scrollTop = transcriptEl.scrollHeight }
       if (!m.tab.busy && was.busy && m.tab.id === S.active) { refreshJobs(); if (S.menu === 'jobs') S.menu = null }
       if (m.tab.busy && !was.busy) { const st = (STAT[m.tab.id] ??= { chars: 0, total: 0, t0: 0, last: 0 }); st.chars = 0; st.t0 = 0 }
-      if (m.tab.id === S.active) { refreshStatus(); refreshGoal() }
+      if (m.tab.id === S.active) { refreshStatus(); refreshGoal(); refreshDeadBar() }
       if (S.view !== 'chat') return
       // Tab strip (spinner / unread / title) always; composer and spinner only for the active tab.
       const strip = document.querySelector('.tabbar')
@@ -1219,6 +1247,7 @@ function userActions(it) {
     h('button', { class: 'menu-item', title: 'Undo file edits omp made after this message', onclick: () => pick({ type: 'rewind', tab: S.active, itemId: it.id }) }, 'Rewind code to here'),
     h('button', { class: 'menu-item', title: 'Both: undo the file edits and go back to this message', onclick: () => pick({ type: 'editFrom', tab: S.active, itemId: it.id, rewindCode: true }) }, 'Fork conversation and rewind code'),
     h('div', { class: 'menu-sep' }),
+    h('button', { class: 'menu-item', onclick: () => { S.userMenu = null; togglePin(it.id); upsertNode(it) } }, isPinned(it.id) ? 'Unpin' : 'Pin to top'),
     h('button', { class: 'menu-item', title: 'Copy the whole chat so far into a new tab', onclick: () => pick({ type: 'fork', tab: S.active }) }, 'Duplicate chat in new tab')) : null)
 }
 document.addEventListener('click', e => { if (S.userMenu && !e.target.closest('.ua')) { const it = items().find(x => x.id === S.userMenu); S.userMenu = null; if (it) upsertNode(it) } })
@@ -1395,6 +1424,7 @@ function statusLine() {
     t.stats || s.total ? seg('out', 'upArrow', t.stats && !t.busy ? fmtTok(t.stats.output) : fmtTok((t.stats?.output ?? 0) + Math.round(s.chars / 4)), 'Output tokens (omp session' + (t.busy ? ' + streaming estimate)' : ')')) : null,
     t.stats?.cacheRead ? seg('cache', 'db', fmtTok(t.stats.cacheRead), `Cache read${t.stats.input + t.stats.cacheRead ? ` · ${(t.stats.cacheRead / (t.stats.input + t.stats.cacheRead) * 100).toFixed(0)}% hit` : ''}`) : null,
     seg('rate', 'bolt', rate ? `${rate} tok/s` : t.stats?.apiMs ? `${(t.stats.output / (t.stats.apiMs / 1000)).toFixed(1)} tok/s` : '', rate ? 'Output speed now (estimated)' : 'Average model speed (omp session)'),
+    t.turnCost ? seg('turn-cost', '', '$' + t.turnCost.toFixed(t.turnCost < 1 ? 3 : 2) + ' this request', 'Cost of your last message, including autopilot and goal turns it set off') : null,
     seg('cost', '', (u.cost ?? t.stats?.cost) ? '$' + (u.cost ?? t.stats.cost).toFixed((u.cost ?? t.stats.cost) < 1 ? 3 : 2) : '', 'Session cost (omp)'))
 }
 /** Rebuild the status line only when what it shows changed (it is asked every second). */
@@ -1578,6 +1608,14 @@ document.addEventListener('keydown', e => {
   else if (document.getElementById('job-panel')) { e.preventDefault(); e.stopPropagation(); closeJobs() }
 }, true)
 
+// ───────────── omp stopped ─────────────
+function deadBar() {
+  if (!tab().dead) return null
+  return h('div', { class: 'dead-bar', id: 'dead-bar', role: 'alert' }, h('span', {}, h('b', {}, 'omp stopped.'), ' Its process exited; your chat is kept.'),
+    h('button', { class: 'need-btn primary', onclick: () => send({ type: 'restartOmp', tab: S.active }) }, 'Restart omp'))
+}
+function refreshDeadBar() { const el = document.getElementById('dead-bar'), fresh = deadBar(); if (el) { if (fresh) el.replaceWith(fresh); else el.remove() } else if (fresh) document.querySelector('.composer-wrap')?.prepend(fresh) }
+
 // Todo bar and lists, in-chat permission cards.
 // ───────────── todo (omp `todo` tool) ─────────────
 /** Latest todo list in this chat, from the newest todo tool result. */
@@ -1691,11 +1729,30 @@ function findBar() {
 function openFind() { if (S.view !== 'chat' || !transcriptEl) return; if (!document.getElementById('findbar')) transcriptEl.before(findBar()); const i = document.getElementById('find-input'); i.focus(); i.select(); runFind() }
 function closeFind() { document.getElementById('findbar')?.remove(); S.find = ''; clearMarks(); document.getElementById('input')?.focus() }
 function clearMarks() { for (const m of transcriptEl?.querySelectorAll('mark.hit') ?? []) m.replaceWith(document.createTextNode(m.textContent)); transcriptEl?.normalize() }
+/** Text of an item as find sees it (prompt, reply, tool title / command / output). */
+const findText = it => it.type === 'tool' ? [it.card.title, it.card.input, it.card.output].filter(Boolean).join('\n') : it.text ?? it.message ?? ''
+/** Make every item that matches `q` rendered: widen the window and unfold groups that hold a match. @returns true if it re-rendered. */
+function revealMatches(q) {
+  const list = items(); let changed = false
+  const hitIdx = list.map((it, i) => findText(it).toLowerCase().includes(q) ? i : -1).filter(i => i >= 0)
+  if (!hitIdx.length) return false
+  const need = list.length - hitIdx[0]
+  if (need > (S.window[S.active] ?? 200)) { S.window[S.active] = need; changed = true }
+  for (const i of hitIdx) {
+    // the group key is the first item of its run: walk back over groupable items
+    let j = i; while (j > 0 && groupable(list[j - 1])) j--
+    const key = 'g:' + list[j].id
+    if (groupable(list[i]) && !S.open.has(key)) { S.open.add(key); changed = true }
+  }
+  if (changed) { const bar = document.getElementById('findbar'); const v = document.getElementById('find-input')?.value; render(); if (bar && !document.getElementById('findbar')) { transcriptEl.before(findBar()); const i = document.getElementById('find-input'); if (i) { i.value = v ?? ''; i.focus() } } }
+  return changed
+}
 function runFind() {
   clearMarks()
   const q = (S.find ?? '').toLowerCase(), count = document.getElementById('find-count')
   if (!q || !transcriptEl) { if (count) count.textContent = ''; return }
-  // Find covers what is rendered; older items load when you click "Show earlier".
+  if (revealMatches(q)) return runFind()
+  // revealMatches() has made every matching item rendered (older ones and folded groups included)
   const hits = []
   const walker = document.createTreeWalker(transcriptEl, NodeFilter.SHOW_TEXT, { acceptNode: n => n.parentElement?.closest('button, .copy') ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT })
   const texts = []; while (walker.nextNode()) texts.push(walker.currentNode)
