@@ -56,7 +56,7 @@ export class OmpSession {
   title: string | undefined
   usage: { used?: number; size?: number; cost?: number } = {}
   /** Prompts sent while a turn was running; omp gets them one at a time, in order. */
-  queue: { text: string; images: { mimeType: string; data: string }[]; shown?: boolean; goal?: boolean }[] = []
+  queue: { text: string; images: { mimeType: string; data: string }[]; shown?: boolean; goal?: boolean; tries?: number }[] = []
   /** Active goal, driven by the extension between turns. */
   goal: Goal | undefined
   /** Autopilot: continue on its own when a turn stops with open todo items (at most `maxContinues` per request of yours). */
@@ -154,7 +154,18 @@ export class OmpSession {
         const r = await this.host.rpc().request(methods.agent.session.prompt, { sessionId: this.id, prompt }) as { stopReason?: string }
         if (r?.stopReason === 'refusal') this.events.item(this, this.transcript.error('omp refused this request.'))
       } catch (error) {
-        this.events.item(this, this.transcript.error(String((error as Error)?.message ?? error)))
+        const msg = String((error as Error)?.message ?? error)
+        // omp started a turn of its own (a background job finished, a todo reminder) just as we sent this:
+        // hand the message to that turn instead of failing it, else retry once it is free
+        if (/already processing|steer\(\) or followUp\(\)/iu.test(msg)) {
+          const busyTurn = this.host.steering
+            ? await this.host.rpc().request('_session/steering', { sessionId: this.id, prompt: [{ type: 'text', text: next.text }, ...next.images.map(i => ({ type: 'image', mimeType: i.mimeType, data: i.data }))] }).then(r => (r as { outcome?: string })?.outcome !== 'promptRequired' && (r as { outcome?: string })?.outcome !== 'failed', () => false)
+            : false
+          if (!busyTurn) {
+            if ((next.tries ?? 0) < 5) { await new Promise(r => setTimeout(r, 2000)); this.queue.unshift({ ...next, shown: true, tries: (next.tries ?? 0) + 1 }) }
+            else this.events.item(this, this.transcript.error('omp stayed busy with a turn of its own; your message was not sent. Send it again.'))
+          }
+        } else this.events.item(this, this.transcript.error(msg))
       } finally {
         this.busy = false
         this.waitingForKey = false
