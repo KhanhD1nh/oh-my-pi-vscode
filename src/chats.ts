@@ -13,7 +13,7 @@ import { SettingsPane } from './settingsPane.ts'
 import { sessionJobs, sessionStats } from './stats.ts'
 import { longWait, nudgePrompt, shouldNudge } from './autopilot.ts'
 import { predictNext } from './predict.ts'
-import { lockKey, sshKeys } from './sshUnlock.ts'
+import { agentKeys, lockKey, sshKeys } from './sshUnlock.ts'
 import type { AgentModelChoice, ChatItem, HostMessage, SessionStats, TabState, WebviewMessage } from './types.ts'
 
 export const PANEL_TYPE = 'ohMyPi.panel'
@@ -195,6 +195,7 @@ export class ChatProvider implements vscode.WebviewViewProvider {
     panel.iconPath = vscode.Uri.joinPath(media, 'pi-tab.svg')
     panel.webview.html = webviewHtml(panel.webview, media, 'panel', { sessionId: session.id, cwd })
     const entry: ChatTab = { session, cwd, unread: false, panel, startedAt: Date.now() }
+    session.agentKeys = agentKeys
     const ap = vscode.workspace.getConfiguration('ohMyPi')
     session.autopilot.enabled = ap.get<boolean>('autopilot.enabled', true)
     session.autopilot.maxContinues = ap.get<number>('autopilot.maxContinues', 5)

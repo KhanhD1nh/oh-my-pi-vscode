@@ -935,3 +935,7 @@ body.vscode-high-contrast .to-latest { border-color: var(--vscode-contrastBorder
 .jp-cmd pre { max-height: 160px; overflow: auto; white-space: pre-wrap; word-break: break-word; font-size: 12px; }
 .jp-k { font-size: 10.5px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
 .jp-cwd { text-transform: none; letter-spacing: 0; font-family: var(--mono); }
+
+.jp-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.need-btn.danger { background: color-mix(in srgb, var(--vscode-errorForeground, #f85149) 16%, transparent); color: var(--vscode-errorForeground, #f85149); border: 1px solid color-mix(in srgb, var(--vscode-errorForeground, #f85149) 40%, transparent); }
+.need-btn.danger:hover { background: color-mix(in srgb, var(--vscode-errorForeground, #f85149) 26%, transparent); }

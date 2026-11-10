@@ -17,6 +17,14 @@ export function lockKey(key: string): Promise<boolean> {
   return new Promise(resolve => { execFile(sshAdd(), ['-d', key], { timeout: 10_000, windowsHide: true }, err => resolve(!err)).stdin?.end() })
 }
 
+/** Fingerprints of the keys ssh-agent holds now ([] when none or no agent). */
+export function agentKeys(): Promise<string[]> {
+  return new Promise(resolve => {
+    execFile(sshAdd(), ['-l'], { timeout: 8_000, windowsHide: true }, (err, stdout) => resolve(err ? [] : String(stdout).split('\n').map(l => l.trim()).filter(l => /SHA256:/u.test(l))))
+      .stdin?.end()
+  })
+}
+
 /** Private keys in ~/.ssh: files that have a matching .pub. */
 export async function sshKeys(): Promise<string[]> {
   const dir = join(homedir(), '.ssh')

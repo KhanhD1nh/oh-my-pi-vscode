@@ -1546,7 +1546,7 @@ function renderJobPanel() {
   const count = s => all.filter(j => j.status === s).length
   const tab = (key, label) => h('button', { class: `cat${jobView.filter === key ? ' on' : ''}`, onclick: () => { jobView.filter = key; renderJobPanel() } }, label)
   const old = document.getElementById('job-panel')
-  const keep = old?.querySelector('.jp-out pre')?.scrollTop ?? 0
+  const keep = old?.querySelector('.jp-out > .codeblock pre')?.scrollTop ?? 0
   const panel = h('div', { class: 'agent-panel', id: 'job-panel', onkeydown: e => { if (e.key === 'Escape') { e.preventDefault(); closeJobs() } } },
     h('div', { class: 'ap-head' },
       h('button', { class: 'icon-btn', title: 'Back to the chat (Esc)', onclick: closeJobs }, svg(ICON.back)),
@@ -1561,11 +1561,14 @@ function renderJobPanel() {
     sel ? h('div', { class: 'jp-out' },
       h('div', { class: 'jp-out-head' }, jobState(sel.status), h('b', {}, sel.label), h('span', { class: 'muted' }, ` · ${sel.status}${sel.at ? ' · started ' + clock(sel.at) : ''}${sel.durationMs != null ? ' · ' + took(sel.durationMs) : ''}`)),
       sel.command ? h('div', { class: 'jp-cmd' }, h('div', { class: 'jp-k' }, 'Command', sel.cwd ? h('span', { class: 'jp-cwd', title: sel.cwd }, ` · in ${sel.cwd}`) : null), h('div', { class: 'codeblock' }, copyBtn(sel.command), h('pre', {}, sel.command))) : null,
+      sel.status === 'running' ? h('div', { class: 'jp-actions' },
+        h('button', { class: 'need-btn secondary', title: 'omp reads the job and shows its latest output in the chat', onclick: () => { send({ type: 'jobAction', tab: S.active, jobId: sel.jobId, action: 'peek' }); closeJobs() } }, 'Show live output'),
+        h('button', { class: 'need-btn danger', title: 'Stop this job (asks first)', onclick: () => send({ type: 'jobAction', tab: S.active, jobId: sel.jobId, action: 'kill' }) }, 'Stop job')) : null,
       h('div', { class: 'jp-k' }, 'Output'),
       sel.output ? h('div', { class: 'codeblock' }, copyBtn(sel.output), h('pre', {}, sel.output))
-        : h('div', { class: 'muted ap-empty' }, sel.status === 'running' ? 'Still running — its output arrives when it finishes.' : 'No output.')) : null)
+        : h('div', { class: 'muted ap-empty' }, sel.status === 'running' ? 'Still running — omp keeps the live output in memory; “Show live output” asks omp to print it in the chat.' : 'No output.')) : null)
   if (old) old.replaceWith(panel); else { app.append(panel); panel.classList.add('enter'); queueMicrotask(() => panel.querySelector('.jp-row.on, .jp-row')?.focus()) }
-  const pre = panel.querySelector('.jp-out pre'); if (pre) pre.scrollTop = keep
+  const pre = panel.querySelector('.jp-out > .codeblock pre'); if (pre) pre.scrollTop = keep
 }
 
 // Esc closes an open agent/jobs panel wherever focus is (the panel covers the chat, so it owns Esc).

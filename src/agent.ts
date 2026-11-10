@@ -202,12 +202,24 @@ export class OmpSession {
    * A bash call failed for want of an unlocked SSH key: tell the running turn to wait for you instead of
    * reporting failure. The unlock box sends "key loaded" into the same turn, which ends that wait.
    */
+  /** Set by the host: keys currently in ssh-agent (to tell a locked key from a refused one). */
+  agentKeys: () => Promise<string[]> = async () => []
   private holdForKey(item: ChatItem): void {
     if (item.type !== 'tool' || !this.busy || !this.host.steering) return
     const c = item.card
     if (c.status !== 'failed' && c.status !== 'completed') return
     if (!c.needsInput || !/ssh/iu.test(c.needsInput) || this.heldForKey.has(c.id)) return
     this.heldForKey.add(c.id)
+    void this.agentKeys().then(keys => {
+      if (!keys.length) { this.holdTurnForKey(); return }
+      // a key is loaded and the server still refuses: not a passphrase problem
+      delete c.needsInput; c.sshRefused = true
+      this.events.item(this, item)
+      this.events.item(this, this.transcript.notice(`Server refused the SSH key that is loaded (${keys.length} key${keys.length > 1 ? 's' : ''} in ssh-agent) — check user, port, or that this key's .pub is in the server's authorized_keys`))
+    })
+  }
+  private holdTurnForKey(): void {
+    if (!this.busy) return
     this.waitingForKey = true
     this.events.item(this, this.transcript.notice('SSH key locked — told omp to wait while you unlock it above the input'))
     void this.host.rpc().request('_session/steering', { sessionId: this.id, prompt: [{ type: 'text', text: [

@@ -88,6 +88,19 @@ export async function handleMessage(p: ChatProvider, m: WebviewMessage, from: st
     case 'answer': p.tab(m.tab)?.session.answer(m.itemId, m.action, m.content); return
     case 'rewind': { const t = p.tab(m.tab); if (t) await revertEditsAfter(t.session.transcript.items, m.itemId); return }
     case 'log': p.log(m.line); return
+    case 'jobAction': {
+      const t = p.tab(m.tab); if (!t || !/^[\w.-]+$/u.test(m.jobId)) return
+      if (m.action === 'kill') {
+        const ok = await vscode.window.showWarningMessage(`Stop background job ${m.jobId}?`, { modal: true }, 'Stop job')
+        if (ok !== 'Stop job') return
+      }
+      const text = m.action === 'kill'
+        ? `Stop background job ${m.jobId} now: write to proc://${m.jobId}/kill (no content). Then confirm in one line that it stopped.`
+        : `Read proc://${m.jobId} and show me its latest output (last ~40 lines) in a code block, with its status. Do not wait for it and do not change anything.`
+      const notice = m.action === 'kill' ? `Asked omp to stop ${m.jobId}` : `Asked omp for the live output of ${m.jobId}`
+      if (t.session.busy) t.session.nudge(text, notice); else t.session.prompt(text)
+      return
+    }
     case 'sshKeys': reply({ type: 'sshKeys', keys: await sshKeys() }); return
     case 'unlockKey': {
       const r = await unlockKey(m.key, m.passphrase, p.storage)

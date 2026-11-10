@@ -177,7 +177,7 @@ export class Transcript {
       let args: { command?: string; pty?: boolean } = {}
       try { args = JSON.parse(card.input ?? '{}') } catch { args = {} }
       const why = args.command ? needsInput(args.command, card.output ?? '', args.pty === true) : undefined
-      if (why) card.needsInput = why; else delete card.needsInput
+      if (why && !card.sshRefused) card.needsInput = why; else delete card.needsInput
     }
     const phases = (update.rawOutput as { details?: { phases?: unknown } } | undefined)?.details?.phases
     if (card.name === 'todo' && Array.isArray(phases)) card.todo = phases as ToolCard['todo']

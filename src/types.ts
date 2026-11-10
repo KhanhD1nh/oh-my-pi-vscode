@@ -41,6 +41,8 @@ export interface ToolCard {
   diff?: { path: string; oldText: string; newText: string }
   /** Why this command waits for a person (passphrase, password, yes/no…); set by the host from command + output. */
   needsInput?: string
+  /** The server refused a key already in ssh-agent: not a passphrase problem, no unlock box. */
+  sshRefused?: boolean
   /** When the call started and finished (ms since epoch), for its duration. */
   startedAt?: number
   endedAt?: number
@@ -160,6 +162,7 @@ export type WebviewMessage =
   | { type: 'autopilot'; tab: string; on: boolean }
   | { type: 'sshKeys' }
   | { type: 'log'; line: string }
+  | { type: 'jobAction'; tab: string; jobId: string; action: 'peek' | 'kill' }
   | { type: 'unlockKey'; tab: string; key: string; passphrase: string }
   | { type: 'openFile'; path: string; line?: number }
   | { type: 'openDiff'; tab: string; toolId: string }
