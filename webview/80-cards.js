@@ -98,7 +98,13 @@ function askEl(it) {
   // per question: "Other" picked (its text box shown); omp reads a non-empty <k>__other as the answer
   const otherOn = {}
   const answered = k => otherOn[k] ? !!String(val[k + '__other'] ?? '').trim() : !(val[k] === undefined || val[k] === '' || (Array.isArray(val[k]) && !val[k].length))
-  const check = () => { if (submit) submit.disabled = props.some(([k]) => (otherOn[k] || (it.schema.required ?? []).includes(k)) && !answered(k)) }
+  const check = () => {
+    if (submit) submit.disabled = props.some(([k]) => (otherOn[k] || (it.schema.required ?? []).includes(k)) && !answered(k))
+    // a tick on each question once it has an answer, and a count on the Submit row
+    let got = 0
+    for (const [k] of props) { const ok = answered(k); if (ok) got++; const el = submit?.closest('.q')?.querySelector(`[data-need="${CSS.escape(k)}"]`); if (el) { el.textContent = ok ? '✓' : ''; el.classList.toggle('ok', ok) } }
+    const cnt = submit?.closest('.q')?.querySelector('.q-count'); if (cnt) cnt.textContent = n > 1 ? `${got}/${n} answered` : ''
+  }
   const blocks = props.map(([k, p], qi) => {
     const o = opts(p)
     const chosen = done ? [c[k]].flat().filter(v => v !== undefined) : null
@@ -139,18 +145,23 @@ function askEl(it) {
     } else {
       body = done ? h('div', { class: 'q-text-ans' }, String(c[k] ?? '—')) : h('textarea', { class: 'field ask-text', rows: 2, placeholder: 'Type your answer…', oninput: e => { val[k] = p.type === 'number' || p.type === 'integer' ? Number(e.target.value) : e.target.value; check() } })
     }
-    return h('div', { class: 'q-block' },
-      h('div', { class: 'q-question' }, n > 1 ? h('span', { class: 'ask-n' }, String(qi + 1)) : null, p.title || k),
-      p.description && p.description !== p.title ? h('div', { class: 'ask-d' }, p.description) : null,
+    const answeredNow = done ? true : null
+    return h('section', { class: 'q-block' + (n > 1 ? ' multi' : ''), 'data-q': k },
+      h('header', { class: 'q-bhead' },
+        n > 1 ? h('span', { class: 'q-num', 'aria-hidden': 'true' }, String(qi + 1)) : null,
+        h('div', { class: 'q-btitle' },
+          p.description && p.description !== p.title ? h('span', { class: 'q-topic' }, p.description) : null,
+          h('div', { class: 'q-question' }, p.title || k)),
+        answeredNow ? null : h('span', { class: 'q-need', 'data-need': k })),
       body, otherBox)
   })
   queueMicrotask(check)
   // with one question the message usually repeats it: show the message only when it says something else
-  const msg = n === 1 && props[0][1].title && it.message.trim() === String(props[0][1].title).trim() ? null : h('div', { class: 'ask-msg', html: md(it.message) })
+  const msg = (n === 1 && props[0][1].title && it.message.trim() === String(props[0][1].title).trim()) || /^Answer \d+ questions?$/u.test(it.message.trim()) ? null : h('div', { class: 'ask-msg', html: md(it.message) })
   return h('div', { class: 'q' + (done ? ' done' : '') }, head,
-    h('div', { class: 'q-card' }, msg, blocks,
+    h('div', { class: 'q-card' + (n > 1 ? ' multi' : ' single') }, msg, blocks,
       done ? (it.answer.action !== 'accept' ? h('div', { class: 'muted' }, 'Skipped') : null)
-        : h('div', { class: 'ask-actions' }, h('button', { class: 'ask-skip', onclick: () => send({ type: 'answer', tab: S.active, itemId: it.id, action: 'decline' }) }, 'Skip'), submit)))
+        : h('div', { class: 'ask-actions' }, h('span', { class: 'q-count' }), h('button', { class: 'ask-skip', onclick: () => send({ type: 'answer', tab: S.active, itemId: it.id, action: 'decline' }) }, 'Skip'), submit)))
 }
 
 /** Image thumbnail; click opens it full size. */
