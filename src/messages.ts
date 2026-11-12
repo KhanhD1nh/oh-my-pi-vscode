@@ -111,7 +111,9 @@ export async function handleMessage(p: ChatProvider, m: WebviewMessage, from: st
       reply({ type: 'unlocked', key: m.key, ...r })
       // the key is in the agent now: tell the running turn (or the next one) to try again
       if (r.ok && m.tab) p.keyUnlocked(m.key, m.tab)
-      if (r.ok) { const t = p.tab(m.tab); if (t && !t.session.keyLoaded()) { const msg = `I loaded the SSH key ${m.key.split(/[\\/]/u).pop()} into ssh-agent. Retry the ssh/git command that failed and continue.`; if (t.session.busy) t.session.nudge(msg, 'SSH key loaded — told omp to retry'); else t.session.prompt(msg) } }
+      // only a turn that is still running (and did not hold on its own) is told; an ended turn gets no new prompt —
+      // you unlocked for whatever comes next, not to restart old work
+      if (r.ok) { const t = p.tab(m.tab); if (t && !t.session.keyLoaded() && t.session.busy) t.session.nudge(`I loaded the SSH key ${m.key.split(/[\\/]/u).pop()} into ssh-agent. Retry the ssh/git command that failed and continue.`, 'SSH key loaded — told omp to retry') }
       return
     }
     case 'runInTerminal': {

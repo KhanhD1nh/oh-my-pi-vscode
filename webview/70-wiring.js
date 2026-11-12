@@ -88,7 +88,7 @@ window.addEventListener('message', ({ data: m }) => {
       return
     }
     case 'prediction': S.predict ??= {}; S.predict[m.tab] = m.text; if (m.tab === S.active) syncGhost(); return
-    case 'sshLocked': for (const id of Object.keys(SSH.state)) if (SSH.state[id]?.ok) delete SSH.state[id]; return
+    case 'sshLocked': return // old failures stay resolved; only a new SSH failure asks again
     case 'sshKeys': SSH.keys = m.keys; for (const it of items()) if (it.type === 'tool' && it.card.needsInput) refreshSsh(it.card.id); return
     case 'unlocked': {
       for (const [id, st] of Object.entries(SSH.state)) if (st.busy && st.key === m.key) SSH.state[id] = m.ok ? { ok: true } : { key: m.key, error: m.message }

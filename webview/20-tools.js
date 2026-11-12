@@ -98,6 +98,8 @@ function sshPending() {
   const list = items()
   for (let i = list.length - 1; i >= 0; i--) {
     const it = list[i]
+    // a prompt of yours after the failure means you moved on: don't ask for an old failure
+    if (it.type === 'user') return null
     if (it.type !== 'tool' || !it.card.needsInput || !/ssh|passphrase/iu.test(it.card.needsInput)) continue
     return SSH.state[it.card.id]?.ok ? null : it.card
   }
