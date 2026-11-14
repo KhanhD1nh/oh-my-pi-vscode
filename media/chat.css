@@ -985,3 +985,5 @@ body.vscode-high-contrast .to-latest { border-color: var(--vscode-contrastBorder
 .q-card.single { padding: 12px 14px; }
 .q-card.single > .q-block { border: 0; padding: 0; background: none; }
 .q-card.single .q-need { display: none; }
+/* ghost text never shows over typed text, however the text got there (IME, history, paste, drafts) */
+.composer:has(#input:not(:placeholder-shown)) .ghost { display: none; }

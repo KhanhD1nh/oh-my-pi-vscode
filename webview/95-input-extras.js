@@ -148,4 +148,4 @@ document.addEventListener('keydown', e => {
   if ((e.key === 'Tab' && !e.shiftKey) || e.key === 'ArrowRight') { if (takeGhost(ta)) e.preventDefault() }
   else if (e.key === 'Escape') { S.predict[S.active] = ''; syncGhost() }
 }, true)
-document.addEventListener('input', e => { if (e.target?.id === 'input') syncGhost() })
+for (const ev of ['input', 'compositionstart', 'compositionend', 'keyup']) document.addEventListener(ev, e => { if (e.target?.id === 'input') syncGhost() })
