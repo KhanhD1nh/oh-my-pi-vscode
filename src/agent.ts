@@ -7,6 +7,7 @@ import { spawn, type ChildProcess } from 'node:child_process'
 import { Readable as NodeReadable, Writable as NodeWritable } from 'node:stream'
 import { client as createAcpClientApp, methods, ndJsonStream, PROTOCOL_VERSION } from '@agentclientprotocol/sdk'
 import { ompEnv } from './binary.ts'
+import { ompMcpServers } from './mcpConfig.ts'
 import { Transcript } from './transcript.ts'
 import { type Goal, next as goalNext, startPrompt } from './goal.ts'
 import { continuePrompt, openTodos } from './autopilot.ts'
@@ -426,6 +427,10 @@ export class OmpHost {
   private client: Rpc | undefined
   private starting: Promise<void> | undefined
   readonly sessions = new Map<string, OmpSession>()
+  /** omp's own MCP servers for a session in `cwd` (ACP mode connects only what the client sends). */
+  private async mcp(cwd: string): Promise<Awaited<ReturnType<typeof ompMcpServers>>> {
+    try { return await ompMcpServers(cwd) } catch (error) { this.events.log(`mcp config: ${String(error)}`); return [] }
+  }
   /** Kill omp (if it is still running) so the next message starts a fresh process. */
   async restart(): Promise<void> {
     const child = this.child
@@ -514,7 +519,7 @@ export class OmpHost {
   async ready(session: OmpSession): Promise<void> {
     await this.ensure()
     if (this.revive.delete(session.id)) {
-      await this.rpc().request(methods.agent.session.load, { sessionId: session.id, cwd: this.cwd(), mcpServers: [] }).catch(() => {})
+      await this.rpc().request(methods.agent.session.load, { sessionId: session.id, cwd: this.cwd(), mcpServers: await this.mcp(this.cwd()) }).catch(() => {})
     }
   }
 
@@ -525,7 +530,7 @@ export class OmpHost {
    */
   async create(carry: { model?: string; thinking?: string } = {}): Promise<OmpSession> {
     await this.ensure()
-    const created = await this.rpc().request(methods.agent.session.new, { cwd: this.cwd(), mcpServers: [] }) as { sessionId: string; configOptions?: ConfigOption[] }
+    const created = await this.rpc().request(methods.agent.session.new, { cwd: this.cwd(), mcpServers: await this.mcp(this.cwd()) }) as { sessionId: string; configOptions?: ConfigOption[] }
     const session = new OmpSession(this, created.sessionId, this.events)
     session.readConfig(created.configOptions ?? [])
     this.sessions.set(session.id, session)
@@ -547,7 +552,7 @@ export class OmpHost {
     if (row.title) { session.title = row.title; if (!/^untitled/iu.test(row.title)) session.markNamed() }
     this.sessions.set(session.id, session)
     this.events.reset(session)
-    const r = await this.rpc().request(methods.agent.session.load, { sessionId: row.sessionId, cwd: row.cwd || this.cwd(), mcpServers: [] }) as { configOptions?: ConfigOption[] }
+    const r = await this.rpc().request(methods.agent.session.load, { sessionId: row.sessionId, cwd: row.cwd || this.cwd(), mcpServers: await this.mcp(row.cwd || this.cwd()) }) as { configOptions?: ConfigOption[] }
     session.readConfig(r?.configOptions ?? [])
     this.events.state(session)
     // Untitled session that already has a conversation: name it now, not after the next prompt.
@@ -558,7 +563,7 @@ export class OmpHost {
   /** Fork `source` into a new omp session (omp's own `session/fork`); the transcript is copied. */
   async fork(source: OmpSession): Promise<OmpSession> {
     await this.ensure()
-    const r = await this.rpc().request(methods.agent.session.fork, { sessionId: source.id, cwd: this.cwd(), mcpServers: [] }) as { sessionId: string; configOptions?: ConfigOption[] }
+    const r = await this.rpc().request(methods.agent.session.fork, { sessionId: source.id, cwd: this.cwd(), mcpServers: await this.mcp(this.cwd()) }) as { sessionId: string; configOptions?: ConfigOption[] }
     const session = new OmpSession(this, r.sessionId, this.events)
     session.title = `${source.title ?? 'Chat'} (fork)`
     session.transcript.copyFrom(source.transcript)
