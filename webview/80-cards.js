@@ -77,9 +77,12 @@ function askEl(it) {
   if (plan) return plan
   // omp adds "<id>__other" free-text fields next to each choice question; they render as an "Other" box
   const all = Object.entries(it.schema.properties ?? {})
-  const props = all.filter(([k]) => !k.endsWith('__other'))
-  const other = k => all.find(([o]) => o === k + '__other')
-  const opts = p => p.oneOf?.map(o => ({ v: o.const, t: o.title, d: o.description })) ?? p.enum?.map(v => ({ v, t: v })) ?? p.items?.anyOf?.map(o => ({ v: o.const, t: o.title, d: o.description })) ?? p.items?.enum?.map(v => ({ v, t: v })) ?? null
+  // The free-text companion of a choice question, found by shape and not only by the exact key: omp names it
+  // "<id>__other" (with trailing "_" on a name clash) and titles it "<question> — Other".
+  const isOtherOf = (k, p, [o, q]) => o !== k && q.type === 'string' && !opts(q) && (o.startsWith(k + '__other') || (!!p.title && String(q.title ?? '').startsWith(p.title + ' — ')))
+  const other = k => { const p = it.schema.properties[k]; return opts(p) ? all.find(e => isOtherOf(k, p, e)) : undefined }
+  const props = all.filter(e => !all.some(([k, p]) => opts(p) && isOtherOf(k, p, e)))
+  function opts(p) { return p.oneOf?.map(o => ({ v: o.const, t: o.title, d: o.description })) ?? p.enum?.map(v => ({ v, t: v })) ?? p.items?.anyOf?.map(o => ({ v: o.const, t: o.title, d: o.description })) ?? p.items?.enum?.map(v => ({ v, t: v })) ?? null }
   const done = !!it.answer
   const c = it.answer?.content ?? {}
   const val = {}
@@ -97,7 +100,7 @@ function askEl(it) {
   const submit = done ? null : h('button', { class: 'ask-submit', onclick: () => send({ type: 'answer', tab: S.active, itemId: it.id, action: 'accept', content: val }) }, 'Submit')
   // per question: "Other" picked (its text box shown); omp reads a non-empty <k>__other as the answer
   const otherOn = {}
-  const answered = k => otherOn[k] ? !!String(val[k + '__other'] ?? '').trim() : !(val[k] === undefined || val[k] === '' || (Array.isArray(val[k]) && !val[k].length))
+  const answered = k => otherOn[k] ? !!String(val[other(k)?.[0]] ?? '').trim() : !(val[k] === undefined || val[k] === '' || (Array.isArray(val[k]) && !val[k].length))
   const check = () => {
     if (submit) submit.disabled = props.some(([k]) => (otherOn[k] || (it.schema.required ?? []).includes(k)) && !answered(k))
     // a tick on each question once it has an answer, and a count on the Submit row
@@ -157,7 +160,10 @@ function askEl(it) {
   })
   queueMicrotask(check)
   // with one question the message usually repeats it: show the message only when it says something else
-  const msg = (n === 1 && props[0][1].title && it.message.trim() === String(props[0][1].title).trim()) || /^Answer \d+ questions?$/u.test(it.message.trim()) ? null : h('div', { class: 'ask-msg', html: md(it.message) })
+  // (omp may send context and then the question again as the last line: keep the context, drop the repeat)
+  const one = n === 1 ? String(props[0][1].title ?? '').trim() : ''
+  const text = one && it.message.trim().endsWith(one) ? it.message.trim().slice(0, -one.length).trim() : it.message.trim()
+  const msg = !text || /^Answer \d+ questions?$/u.test(text) ? null : h('div', { class: 'ask-msg', html: md(text) })
   return h('div', { class: 'q' + (done ? ' done' : '') }, head,
     h('div', { class: 'q-card' + (n > 1 ? ' multi' : ' single') }, msg, blocks,
       done ? (it.answer.action !== 'accept' ? h('div', { class: 'muted' }, 'Skipped') : null)
